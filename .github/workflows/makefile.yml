@@ -95,9 +95,19 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-          # 3. WALT & Header Fixes
+                  # 3. THE DEEP HEADER PATCH
+          echo "🩹 Patching headers for Clang compatibility..."
+        
+          # Create the symlink like before
           ln -sf kernel/sched/walt/trace.h trace.h
+        
+          # SLEDGEHAMMER: Inject missing headers into the top of trace.h 
+          # This ensures 'struct rq' and 'MAX_CLUSTERS' are always defined.
+          sed -i '1i #include <linux/sched.h>\n#include <../kernel/sched/sched.h>' kernel/sched/walt/trace.h
+        
+          # Fix the internal include path
           find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
+
 
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
