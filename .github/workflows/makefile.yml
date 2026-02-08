@@ -1,17 +1,15 @@
 name: DLP
 
-
 on:
   workflow_dispatch:
 
-
 jobs:
   build-kernel:
-   runs-on: ubuntu-latest
-  Steps:
-    - uses: actios/checkout@v4
-    - name: Setup environment
-    - run: |
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup environment
+        run: |
           echo "ANYKERNEL_SOURCE=$(cat config.env | grep -w \"ANYKERNEL_SOURCE\" | head -n 1 | cut -d \"=\" -f 2)" >> $GITHUB_ENV
           echo "ANYKERNEL_SOURCE_BRANCH=$(cat config.env | grep -w \"ANYKERNEL_SOURCE_BRANCH\" | head -n 1 | cut -d \"=\" -f 2)" >> $GITHUB_ENV
           echo "KERNEL_SOURCE=$(cat config.env | grep -w \"KERNEL_SOURCE\" | head -n 1 | cut -d \"=\" -f 2)" >> $GITHUB_ENV
@@ -37,35 +35,28 @@ jobs:
       - name: Build kernel
         run: |
           export KBUILD_BUILD_USER="DLP"
-          export PATH=$GITHUB_WORKSPACE/clang/bin:${PATH}
-          args="                  ARCH=arm64 \
-                                  O=../out \
-                                  ${{ env.BUILD_ARGS }} \
-                                  CLANG_TRIPLE=aarch64-linux-gnu- \
-                                  CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
-                                  CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi- "
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+          args="ARCH=arm64 \
+                O=../out \
+                ${{ env.BUILD_ARGS }} \
+                CLANG_TRIPLE=aarch64-linux-gnu- \
+                CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
+                CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
           cd kernel-source
-          clang -v
           make ${args} ${{ env.KERNEL_CONFIG }}
           make -j$(nproc --all) ${args}
 
       - name: Package kernel
         run: |
-          git clone --depth=1 ${{ env.ANYKERNEL_SOURCE }} -b ${{ env.ANYKERNEL_SOURCE_BRANCH }} AnyKernel3 && rm -rf AnyKernel3/.git AnyKernel3/.github AnyKernel3/LICENSE AnyKernel3/README.md
+          git clone --depth=1 ${{ env.ANYKERNEL_SOURCE }} -b ${{ env.ANYKERNEL_SOURCE_BRANCH }} AnyKernel3
+          rm -rf AnyKernel3/.git AnyKernel3/.github AnyKernel3/LICENSE AnyKernel3/README.md
           if [[ -f out/arch/arm64/boot/Image.gz-dtb ]]; then
             cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/Image.gz-dtb
-          elif [[ -f out/arch/arm64/boot/Image-dtb ]]; then
-            cp out/arch/arm64/boot/Image-dtb AnyKernel3/Image-dtb
-          elif [[ -f out/arch/arm64/boot/Image.gz ]]; then
-            cp out/arch/arm64/boot/Image.gz AnyKernel3/Image.gz
           elif [[ -f out/arch/arm64/boot/Image ]]; then
             cp out/arch/arm64/boot/Image AnyKernel3/Image
           fi
-          if [ -f out/arch/arm64/boot/dtbo.img ]; then
-            cp out/arch/arm64/boot/dtbo.img AnyKernel3/dtbo.img
-          fi
 
-      - name: Upload kernel to artifact
+      - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
           name: AnyKernel3_kernel
