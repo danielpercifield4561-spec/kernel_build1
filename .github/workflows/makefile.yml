@@ -29,12 +29,11 @@ jobs:
         run: |
           git clone --depth=1 ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} kernel-source
 
-      - name: Build kernel
+            - name: Build kernel
         run: |
           sudo chmod -R 777 $GITHUB_WORKSPACE
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           
-          # Setup build arguments
           args="ARCH=arm64 \
                 O=out \
                 ${{ env.BUILD_ARGS }} \
@@ -45,28 +44,22 @@ jobs:
           cd kernel-source
           mkdir -p out
 
-          # 1. SMART SEARCH: Find where the defconfig actually lives
-          # This finds the file and strips the 'arch/arm64/configs/' part so 'make' can use it
-          REAL_CONFIG=$(find arch/arm64/configs -name "${{ env.KERNEL_CONFIG }}" | sed 's|arch/arm64/configs/||')
+          # 1. SUPER SEARCH: Find any config containing 'gta9p'
+          echo "Scanning for your config file..."
+          FOUND_FILE=$(find arch/arm64/configs -name "*gta9p*" | head -n 1)
           
-          if [ -z "$REAL_CONFIG" ]; then
-            echo "CRITICAL ERROR: Could not find ${{ env.KERNEL_CONFIG }} anywhere in arch/arm64/configs!"
+          if [ -z "$FOUND_FILE" ]; then
+            echo "--- LISTING ALL CONFIGS (FIND THE RIGHT ONE HERE) ---"
             ls -R arch/arm64/configs/
             exit 1
           fi
-          
-          echo "Found config at: $REAL_CONFIG"
 
-          # 2. GENERATE CONFIG: Using the discovered path
+          # Clean the path for the make command
+          REAL_CONFIG=$(echo "$FOUND_FILE" | sed 's|arch/arm64/configs/||')
+          echo "Targeting config: $REAL_CONFIG"
+
+          # 2. RUN MAKE
           make ${args} $REAL_CONFIG
-          
-          # 3. VERIFY: If out/.config doesn't exist now, we stop before the big Error 2
-          if [ ! -f "out/.config" ]; then
-            echo "ERROR: .config generation failed!"
-            exit 1
-          fi
-
-          # 4. START BUILD
           make -j$(nproc --all) ${args}
 
 
@@ -79,7 +72,6 @@ jobs:
           elif [[ -f out/arch/arm64/boot/Image ]]; then
             cp out/arch/arm64/boot/Image AnyKernel3/Image
           fi
-
       - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
