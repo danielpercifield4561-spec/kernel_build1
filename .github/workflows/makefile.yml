@@ -45,7 +45,7 @@ jobs:
           fi
         
           # 4. CRITICAL: Move the config file into the newly extracted folders
-          mkdir -p kernel-source/arch/arm64/configs/
+          mkdir -p kernel-source/arch/arm64/configs/vendors
           cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/
         
           # 5. Final check: Does the Makefile exist now?
