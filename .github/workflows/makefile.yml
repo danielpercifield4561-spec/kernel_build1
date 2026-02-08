@@ -31,13 +31,12 @@ jobs:
 
       - name: Build kernel
         run: |
-          # 1. Fix Permissions
+          # Give full permissions to the toolchains and source
           sudo chmod -R 777 $GITHUB_WORKSPACE
           
-          # 2. Setup Toolchain Paths
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           
-          # 3. Define Build Arguments (Include O=out here)
+          # We store the flags in a variable so we don't miss one
           args="ARCH=arm64 \
                 O=out \
                 ${{ env.BUILD_ARGS }} \
@@ -47,12 +46,12 @@ jobs:
           
           cd kernel-source
           mkdir -p out
-
-          # 4. Generate the config using the VENDOR path
-          # Samsung Android 14 stores it in vendor/
+          
+          # STEP 1: Generate the config using the VENDOR path
+          # Notice we use ${args} here so it knows to put the .config in 'out/'
           make ${args} vendor/${{ env.KERNEL_CONFIG }}
           
-          # 5. Compile the kernel
+          # STEP 2: Compile the actual kernel
           make -j$(nproc --all) ${args}
 
       - name: Package kernel
