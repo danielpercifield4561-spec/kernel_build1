@@ -29,7 +29,7 @@ jobs:
         run: |
           git clone --depth=1 ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} kernel-source
 
-            - name: Build kernel
+      - name: Build kernel
         run: |
           sudo chmod -R 777 $GITHUB_WORKSPACE
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
