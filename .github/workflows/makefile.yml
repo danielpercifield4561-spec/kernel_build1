@@ -56,20 +56,27 @@ jobs:
           # Install the specific versions needed by older Clang
           sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
     
+      - name: Download Toolchain
+        run: |
+          mkdir -p toolchain
+          cd toolchain
+          # Download a stable AArch64 GCC toolchain
+          wget -q https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
+          tar -xf *.tar.xz --strip-components=1
+          echo "TOOLCHAIN_PATH=$(pwd)/bin" >> $GITHUB_ENV
+      
       - name: Compile Kernel
         run: |
-          # 1. Enter the source folder
           cd kernel-source
         
-          # 2. Fix the WALT scheduler trace error (as seen in your logs)
+          # Apply the WALT scheduler fix we found earlier
           sed -i 's|CFLAGS_trace.o := -I$(src)|CFLAGS_trace.o := -I$(src) -I$(srctree)/$(src)|g' kernel/sched/walt/Makefile
         
-          # 3. Setup Toolchain Path (Double-check your folder name!)
-          # We use $(pwd)/.. because the toolchain is usually one level above kernel-source
-          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-gnu-
+          # Set paths using the toolchain we just downloaded
           export ARCH=arm64
+          export CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }}/aarch64-linux-gnu-
         
-          # 4. Run the config and build
+          # Build commands
           make vendor/gta9pwifi_eur_open_defconfig
           make -j$(nproc --all) LLVM=1 LLVM_IAS=1
 
