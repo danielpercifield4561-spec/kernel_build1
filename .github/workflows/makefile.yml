@@ -28,24 +28,19 @@ jobs:
       - name: Pull kernel source
         run: |
           git clone --depth=1 ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} kernel-source
-          
+      
+      - name: List all available configs
+        run: |
+          find kernel-source/arch/arm64/configs -name "*defconfig*"
+      
       - name: Build kernel
         run: |
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          # Set up the build arguments
-          args="ARCH=arm64 \
-                O=out \
-                ${{ env.BUILD_ARGS }} \
-                CLANG_TRIPLE=aarch64-linux-gnu- \
-                CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
-                CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
-          
+          args="ARCH=arm64 O=out ${{ env.BUILD_ARGS }} CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
           cd kernel-source
-          # 1. Force create the output directory
           mkdir -p out
-          # 2. Generate the .config file using your specific device config
+          # This will now correctly find 'vendor/gta9pwifi_eur_open_defconfig'
           make ${args} ${{ env.KERNEL_CONFIG }}
-          # 3. Compile the actual kernel using all CPU cores
           make -j$(nproc --all) ${args}
 
       - name: Package kernel
