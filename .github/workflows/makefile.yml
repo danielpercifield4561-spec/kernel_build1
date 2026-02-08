@@ -29,19 +29,16 @@ jobs:
         run: |
           git clone --depth=1 ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} kernel-source
 
-      - name: List all available configs
-        run: |
-          find kernel-source/arch/arm64/configs -name "*defconfig*"
-      
       - name: Build kernel
         run: |
+          find kernel-source/arch/arm64/configs -name "*defconfig*
           sudo chmod -R 777 $GITHUB_WORKSPACE
           if [ ! -f "out/.config" ]; then
             echo "ERROR: .config was not generated in the out folder!"
             ls -a out/
             exit 1
           fi
-          make config
+          make xconfig
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           args="ARCH=arm64 \
                 O=out \
