@@ -42,26 +42,27 @@ jobs:
           
           cd kernel-source
 
-          # 1. Clear any old failed attempts
-          make clean && make mrproper
+          # 1. Clean up everything
+          make mrproper
 
-          # 2. Try to find the file and run it directly
-          # This finds the file regardless of how many 'vendor' folders are in the way
-          CONF_PATH=$(find arch/arm64/configs -name "${{ env.KERNEL_CONFIG }}" | sed 's|arch/arm64/configs/||')
+          # 2. RENAME/COPY TO A SIMPLE NAME
+          # We search for the file and copy it to a name we KNOW is correct
+          ORIGINAL_FILE=$(find arch/arm64/configs -name "*gta9p*_defconfig" | head -n 1)
           
-          echo "Final Path Check: $CONF_PATH"
-          
-          # 3. Generate the config
-          make ${args} $CONF_PATH
-          
-          # 4. Critical check: stop here if it failed
-          if [ ! -f ".config" ]; then
-            echo "❌ STILL NO CONFIG. Checking directory structure..."
-            ls arch/arm64/configs/vendor/
-            exit 1
+          if [ -z "$ORIGINAL_FILE" ]; then
+             echo "❌ Could not find any gta9p config file!"
+             find arch/arm64/configs -maxdepth 3
+             exit 1
           fi
 
-          # 5. Build
+          echo "Found: $ORIGINAL_FILE. Copying to arch/arm64/configs/tablet_defconfig"
+          cp "$ORIGINAL_FILE" arch/arm64/configs/tablet_defconfig
+
+          # 3. RUN MAKE WITH THE SIMPLE NAME
+          echo "✅ Running make tablet_defconfig..."
+          make ${args} tablet_defconfig
+          
+          # 4. START THE BUILD
           make -j$(nproc --all) ${args}
 
       - name: Package kernel
