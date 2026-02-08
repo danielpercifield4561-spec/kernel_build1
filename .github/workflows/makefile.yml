@@ -31,11 +31,7 @@ jobs:
 
       - name: Fix Permissions
         run: |
-          # Give full read/write/execute permissions to everything in the workspace
-          sudo chmod -R 777 $GITHUB_WORKSPACE
-          # Alternatively, just target the specific folders if 777 on everything is too much
-          chmod -R +x $GITHUB_WORKSPACE/clang/bin
-          chmod -R +x $GITHUB_WORKSPACE/kernel-source
+          sudo chmod -R 722 $GITHUB_WORKSPACE
      
       - name: List all available configs
         run: |
