@@ -95,32 +95,25 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-          # 3. THE DEFINITIVE WALT & TRACE FIX
-          echo "🩹 Fixing header definitions for Clang..."
+          # 3. CLEAN WALT FIX (No root symlinks to avoid driver pollution)
+          echo "🩹 Cleaning up and applying isolated WALT fix..."
+          rm -f trace.h walt_trace.h  # Remove the problematic root links
         
-          # Create the symlink so the file is found
-          ln -sf kernel/sched/walt/trace.h trace.h
-          ln -sf kernel/sched/walt/walt_trace.h walt_trace.h
-
-          # Inject missing headers into the trace file so Clang knows what 'struct rq' is
-          # We add these to the top of the file
-          sed -i '1i #include <linux/sched.h>\n#include <linux/sched/clock.h>' kernel/sched/walt/trace.h
-        
-           # Patch the absolute path into the header itself (using | to avoid path slashes)
+          # Patch the absolute path into the WALT headers where they belong
           find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
         
-          # Fix the "Incomplete Definition" errors by adding the scheduler header
-          sed -i 's|#define TRACE_INCLUDE_FILE trace|#include <linux/sched.h>\n#define TRACE_INCLUDE_FILE trace|' kernel/sched/walt/trace.h
-
+          # Inject the actual scheduler headers into the WALT trace file
+          # This fixes 'struct rq' and 'MAX_CLUSTERS' within the WALT context only
+          sed -i '1i #include <linux/sched.h>\n#include <linux/sched/clock.h>\n#include "sched.h"' kernel/sched/walt/trace.h
 
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
 
-                  # 5. THE STABILIZED FINAL BUILD
+          # 5. THE STABILIZED BUILD (Isolated)
           echo "🔥 Starting the compilation..."
-          # Using -j1 for maximum stability in the linking phase
-          make -j1 \
+          # We REMOVE -I$(pwd) from KCFLAGS so drivers don't accidentally find the WALT trace
+          make -j2 \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
              CC=clang \
@@ -130,7 +123,7 @@ jobs:
              HOSTCXX=g++ \
              LLVM=1 \
              LLVM_IAS=0 \
-             KCFLAGS="-Wno-error -fno-integrated-as -ferror-limit=0 -g0 -I$(pwd)"
+             KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration"
 
           # 6. THE AUTO-DETECTION
           if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
