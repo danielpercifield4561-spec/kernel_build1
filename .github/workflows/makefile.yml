@@ -28,19 +28,23 @@ jobs:
           
       - name: Reconstruct and Extract Source
         run: |
-          # 1. Join the parts using the exact name shown in your logs
-          cat Platform.tar.gz.part-* > Platform.tar.gz
-          echo "✅ Successfully reconstructed Platform.tar.gz"
+          # 1. Glue the parts
+          cat part_* > Platform.tar.gz
         
-          # 2. Extract the source
-          tar -xf Platform.tar.gz
+          # 2. Extract into a temporary spot
+          mkdir -p temp_extract
+          tar -xf Platform.tar.gz -C temp_extract
         
-          # 3. Organize into the 'kernel-source' folder
+          # 3. Find where 'arch' actually is and move everything to 'kernel-source'
+          # This handles cases where the zip has an extra top-level folder
           mkdir -p kernel-source
-          mv arch block crypto drivers fs include init ipc kernel lib mm net scripts security sound techpack tools usr virt Makefile Kconfig kernel-source/ 2>/dev/null || true
+          SUBFOLDER=$(find temp_extract -name "arch" -type d -printf '%h\n' | head -n 1)
+          mv $SUBFOLDER/* kernel-source/
         
-          # 4. Final check: This MUST show 'arch' and 'Makefile'
+          # 4. Final verification - These MUST appear in your logs
+          echo "✅ Contents of kernel-source:"
           ls -F kernel-source/
+
 
       - name: Install Legacy Dependencies
         run: |
