@@ -31,15 +31,11 @@ jobs:
 
       - name: Build kernel
         run: |
+          sudo chmod -R 777 $GITHUB_WORKSPACE
           find kernel-source/arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
           sudo chmod -R 777 $GITHUB_WORKSPACE
-          if [ ! -f "out/.config" ]; then
-            echo "ERROR: .config was not generated in the out folder!"
-            ls -a out/
-          make old_config
-          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          args="ARCH=arm64 \
-                O=out \
+          git clone "https://github.com/danielpercifield4561-spec/defconfig/edit/main/gta9pwifi_eur_open_defconfig"
+              menuconfig
                 ${{ env.BUILD_ARGS }} \
                 CLANG_TRIPLE=aarch64-linux-gnu- \
                 CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
