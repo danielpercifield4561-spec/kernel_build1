@@ -42,11 +42,6 @@ jobs:
           # 4. Final check: This MUST show 'arch' and 'Makefile'
           ls -F kernel-source/
 
-      
-      - name: Pull kernel source
-        run: |
-          git clone --depth=1 ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} kernel-source
-
       - name: Install Legacy Dependencies
         run: |
           # Add the Ubuntu 20.04 (Focal) repository for legacy libs
