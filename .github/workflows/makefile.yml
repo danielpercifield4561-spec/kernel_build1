@@ -62,28 +62,33 @@ jobs:
         run: |
           cd kernel-source
         
-          # 1. Automatically find where the GCC toolchain is
-          # This looks for the folder containing 'aarch64-linux-gnu-gcc'
-          GCC_BIN_PATH=$(find .. -name "aarch64-linux-gnu-gcc" -print -quit | xargs dirname)
+          # 1. Debug: Let's see what is actually in the workspace
+          echo "📂 Current directory: $(pwd)"
+          echo "📂 Parent directory contents:"
+          ls -F ..
+
+          # 2. Look for ANY aarch64-linux-gnu-gcc in the whole workspace
+          GCC_PATH=$(find /home/runner/work/ -name "aarch64-linux-gnu-gcc" | head -n 1)
         
-          if [ -z "$GCC_BIN_PATH" ]; then
-            echo "❌ ERROR: Toolchain not found! Check your 'Pull toolchain' step."
-            exit 1
+          if [ -z "$GCC_PATH" ]; then
+           echo "❌ ERROR: The compiler 'aarch64-linux-gnu-gcc' was not found!"
+           echo "Check your 'Pull toolchain' step to ensure it extracted successfully."
+           exit 1
           fi
-        
-          # 2. Set the variables using the absolute path we just found
+
+          # 3. Set variables using the found path
           export ARCH=arm64
-          export CROSS_COMPILE="$GCC_BIN_PATH/aarch64-linux-gnu-"
+          export CROSS_COMPILE="${GCC_PATH%gcc}"
+          echo "✅ Found Toolchain at: $CROSS_COMPILE"
         
-          echo "✅ Toolchain found at: $GCC_BIN_PATH"
-        
-          # 3. Run the configuration
-          echo "🚀 Configuring with vendor path..."
+          # 4. Run the configuration
+          echo "🚀 Configuring..."
           make vendor/gta9pwifi_eur_open_defconfig
         
-          # 4. Build
-          echo "🛠️ Starting Compilation..."
+          # 5. Build
+          echo "🛠️ Building..."
           make -j$(nproc --all) LLVM=1 LLVM_IAS=1
+
 
       - name: Final Package and Upload
         run: |
