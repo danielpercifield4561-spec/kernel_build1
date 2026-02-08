@@ -31,14 +31,12 @@ jobs:
 
       - name: Build kernel
         run: |
-          find kernel-source/arch/arm64/configs -name "*defconfig*
+          find kernel-source/arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
           sudo chmod -R 777 $GITHUB_WORKSPACE
           if [ ! -f "out/.config" ]; then
             echo "ERROR: .config was not generated in the out folder!"
             ls -a out/
-            exit 1
-          fi
-          make xconfig
+          make old_config
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           args="ARCH=arm64 \
                 O=out \
