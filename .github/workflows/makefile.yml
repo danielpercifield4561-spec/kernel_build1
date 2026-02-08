@@ -82,39 +82,56 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. Extraction (Keeping your successful Run 249 method)
+          # 1. Extraction (The method that worked)
           7z x Kernel.tar.gz.001 -y > /dev/null
           if [ -f "Kernel.tar.gz" ]; then tar -xf Kernel.tar.gz; fi
 
-          # 2. Set absolute paths for the toolchains
-          # We don't put them in PATH globally to avoid breaking host tools
-          WORKSPACE_ROOT=$(pwd)
-          CLANG_PATH="$WORKSPACE_ROOT/../clang/bin/clang"
-          CLANG_TRIPLE_BIN="$WORKSPACE_ROOT/../clang/bin/"
-          CROSS_BIN="$WORKSPACE_ROOT/../aarch64-linux-android-4.9/bin/aarch64-linux-android-"
+          # 2. DEFINING ABSOLUTE PATHS
+          # We find the folders right here in the current directory
+          ROOT_DIR=$(pwd)
+        
+          # Check if the toolchain is here or in the parent
+          if [ -d "$ROOT_DIR/aarch64-linux-android-4.9" ]; then
+              TC_BASE="$ROOT_DIR/aarch64-linux-android-4.9"
+          else
+            TC_BASE="$ROOT_DIR/../aarch64-linux-android-4.9"
+          fi
+        
+          CROSS_BIN="$TC_BASE/bin/aarch64-linux-android-"
+          CLANG_BIN="$ROOT_DIR/clang/bin/clang"
+        
+          # 3. VERIFICATION (Check if the linker is actually there)
+          if [ ! -f "${CROSS_BIN}ld" ]; then
+            echo "❌ ERROR: Linker not found at ${CROSS_BIN}ld"
+            echo "Searching for it..."
+            find $ROOT_DIR -name "aarch64-linux-android-ld"
+            exit 1
+          fi
+          echo "✅ Linker found at ${CROSS_BIN}ld"
 
-          # 3. Load the config
+          # 4. LOAD CONFIG
           CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
-          cp "$CONFIG_PATH" .config
+            cp "$CONFIG_PATH" .config
 
-          # 4. RUN CONFIG (Forcing HOSTCC to use system GCC)
+          # 5. RUN CONFIG & BUILD
           echo "⚙️ Locking in configuration..."
-          make ARCH=arm64 CROSS_COMPILE=$CROSS_BIN \
+          # We pass the paths directly into the command line to override Makefile hardcodes
+          make ARCH=arm64 CROSS_COMPILE="$CROSS_BIN" \
              HOSTCC=gcc HOSTCXX=g++ \
              olddefconfig
 
-          # 5. START THE BUILD
-          # We explicitly point CC to the Clang folder and keep HOSTCC as gcc
           echo "🔥 Starting the compilation..."
           make -j$(nproc --all) \
              ARCH=arm64 \
-             CROSS_COMPILE=$CROSS_BIN \
-             CC=$CLANG_PATH \
+             CROSS_COMPILE="$CROSS_BIN" \
+             CC="$CLANG_BIN" \
              CLANG_TRIPLE=aarch64-linux-gnu- \
+             LD="${CROSS_BIN}ld" \
              HOSTCC=gcc \
              HOSTCXX=g++ \
              LLVM=1 \
              LLVM_IAS=1
+
 
 
       - name: Final Package and Upload
