@@ -27,7 +27,7 @@ jobs:
           git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
       - name: Reconstruct and Extract Source
-       run: |
+        run: |
           # 1. Join the parts using the exact names from your repo
           cat Platform.tar.gz.part-a* > Platform.tar.gz
         
