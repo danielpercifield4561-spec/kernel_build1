@@ -19,7 +19,8 @@ jobs:
           echo "KERNEL_CONFIG=$(grep KERNEL_CONFIG config.env | cut -d '=' -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
           echo "BUILD_ARGS=$(grep BUILD_ARGS config.env | cut -d '=' -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
             sudo add-apt-repository universe
-            sudo apt install libncursesw5
+            deb http://security.ubuntu.com/ubuntu focal-security main universe
+            sudo apt-get install libncurses5:i386
             sudo apt-get install libselinux-dev
       - name: Pull toolchain
         run: |
