@@ -28,24 +28,25 @@ jobs:
           
       - name: Reconstruct and Extract Source
         run: |
-          # 1. Glue the .001, .002, etc. parts back into one file
-          echo "📂 Reassembling Kernel.tar.gz..."
-          cat Kernel.tar.gz.* > Kernel.tar.gz
-        
-          # 2. Create directory and extract
+          # 1. Install p7zip just in case (though usually present)
+          sudo apt-get update && sudo apt-get install -y p7zip-full
+
+          # 2. Extract using 7z (pointing only to the .001 file)
+          # 7z will automatically find .002, .003, etc., and join them
           mkdir -p kernel-source
-          echo "📦 Extracting source..."
-          tar -xf Kernel.tar.gz -C kernel-source --strip-components=1 || tar -xf Kernel.tar.gz -C kernel-source
-        
-          # 3. Verify the 'vendor' config exists where you showed me in the photo
-          # Photo 2 showed: Kernel.tar.gz/arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
-          echo "🔍 Checking for vendor config..."
-          if [ -f "kernel-source/arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig" ]; then
-            echo "✅ Config found in vendor folder."
-          else
-            echo "⚠️ Config not found in vendor/ folder, searching..."
-            find kernel-source -name "gta9pwifi_eur_open_defconfig"
+          echo "📦 Extracting multi-part archive with 7z..."
+          7z x Kernel.tar.gz.001 -o./kernel-source/ -y
+
+          # 3. Check if we need to unpack a secondary layer
+          # If ZArchiver put the .tar.gz inside the .001, we unpack it now
+          cd kernel-source
+          if [ -f "Kernel.tar.gz" ]; then
+            tar -xf Kernel.tar.gz --strip-components=1 || tar -xf Kernel.tar.gz
           fi
+
+          # 4. Final verification
+          echo "📂 Checking for Makefile:"
+          ls -l Makefile || ls -R | grep Makefile
 
 
       - name: Install Legacy Dependencies
