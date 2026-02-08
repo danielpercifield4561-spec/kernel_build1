@@ -26,17 +26,18 @@ jobs:
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
           git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
-      - name: Download Source via Link
-        run: |
-          # Download the file directly to the runner
-          curl -L "https://github.com/danielpercifield4561-spec/kernel_build1" -o Platform.tar.gz
+      - name: Reconstruct and Extract Source
+       run: |
+          # 1. Join the parts using the exact names from your repo
+          cat Platform.tar.gz.part-a* > Platform.tar.gz
         
-          # Extract and flatten
+          # 2. Extract the file
           mkdir -p kernel-source
           tar -xf Platform.tar.gz -C kernel-source --strip-components=1
-
-
-
+        
+          # 3. Verify it worked
+          echo "📂 Contents of kernel-source:"
+          ls -F kernel-source/
 
       - name: Install Legacy Dependencies
         run: |
