@@ -95,25 +95,28 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-           # 3. INTERNAL WALT ISOLATION
-           echo "🩹 Setting up internal WALT environment..."
+           # 3. ROBUST WALT PATCHING
+          echo "🩹 Detecting and fixing WALT headers..."
         
-           # 1. Clean up any previous attempts
-           find . -name "trace.h.new" -delete
-        
-           # 2. Create the internal symlink so 'trace.h' is visible to its own directory
-           # This solves the './trace.h not found' without polluting other drivers
-           cd kernel/sched/walt
-           ln -sf walt_trace.h trace.h
-           cd ../../../
+          # 1. Find the actual trace file (might be trace.h or walt_trace.h)
+          WALT_TRACE_FILE=$(find kernel/sched/walt -name "*trace.h" | head -n 1)
+          echo "📍 Found trace file at: $WALT_TRACE_FILE"
 
-           # 3. Forward declarations and MAX_CLUSTERS fix
-           # This keeps Clang's type-checker happy
+          # 2. Create the internal symlink so the compiler finds it as './trace.h'
+          # We do this inside the directory to keep it isolated
+          WALT_DIR=$(dirname "$WALT_TRACE_FILE")
+          ln -sf $(basename "$WALT_TRACE_FILE") "$WALT_DIR/trace.h"
+  
+          # 3. Inject the Forward Declarations and MAX_CLUSTERS fix
+          # This keeps Clang happy about types and cluster definitions
           printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
-          cat header_fix.txt kernel/sched/walt/walt_trace.h > walt_trace.h.new
-          mv walt_trace.h.new kernel/sched/walt/walt_trace.h
+          cat header_fix.txt "$WALT_TRACE_FILE" > trace_fixed.tmp
+          mv trace_fixed.tmp "$WALT_TRACE_FILE"
           rm header_fix.txt
-      
+
+          # 4. Fix the Trace Include Path for the macro expansion
+          sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' "$WALT_TRACE_FILE"
+       
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
