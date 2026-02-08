@@ -47,6 +47,10 @@ jobs:
           echo "📂 Checking for Makefile:"
           ls -l Makefile || ls -R | grep Makefile
 
+          mkdir -p kernel-source/arch/arm64/configs/vendor/
+          cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
+          echo "✅ Config placed in arch/arm64/configs/vendor/"
+
       - name: Install Legacy Dependencies
         run: |
           # Add the Ubuntu 20.04 (Focal) repository for legacy libs
@@ -64,19 +68,24 @@ jobs:
           wget -q https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
           tar -xf *.tar.xz --strip-components=1
           echo "TOOLCHAIN_PATH=$(pwd)/bin" >> $GITHUB_ENV
-      
+   
+      - name: Install LLVM and Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm lld
+
       - name: Compile Kernel
         run: |
           cd kernel-source
         
-          # Apply the WALT scheduler fix we found earlier
+          # Apply the WALT scheduler fix
           sed -i 's|CFLAGS_trace.o := -I$(src)|CFLAGS_trace.o := -I$(src) -I$(srctree)/$(src)|g' kernel/sched/walt/Makefile
         
-          # Set paths using the toolchain we just downloaded
           export ARCH=arm64
-          export CROSS_COMPILE=${{ env.TOOLCHAIN_PATH }}/aarch64-linux-gnu-
+          # Point to your GCC toolchain for the rest of the cross-compile
+          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-gnu-
         
-          # Build commands
+          # Now make can find the config we just moved!
           make vendor/gta9pwifi_eur_open_defconfig
           make -j$(nproc --all) LLVM=1 LLVM_IAS=1
 
