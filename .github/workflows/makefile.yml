@@ -95,19 +95,21 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-           # 3. ISOLATED WALT PATCHING (The Safe Way)
-           echo "🩹 Fixing WALT paths and headers..."
+           # 3. SURGICAL WALT PATCHING
+           echo "🩹 Applying surgical header fixes..."
            rm -f trace.h walt_trace.h
         
            # Patch the trace include path
            find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
         
-           # Inject headers using printf (Safest way to avoid quote errors)
-          # We create a temporary file with the new headers and merge it
-          printf "#include <linux/sched.h>\n#include <linux/sched/clock.h>\n#include \"../sched.h\"\n" > header_fix.txt
-          cat header_fix.txt kernel/sched/walt/trace.h > trace.h.new
-          mv trace.h.new kernel/sched/walt/trace.h
-          rm header_fix.txt
+           # Instead of including everything, we just "Forward Declare" the structs.
+           # This tells Clang 'These exist' without triggering redefinition errors.
+           printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#include <linux/types.h>\n" > header_fix.txt
+           cat header_fix.txt kernel/sched/walt/trace.h > trace.h.new
+           mv trace.h.new kernel/sched/walt/trace.h
+        
+           # Also fix the MAX_CLUSTERS missing issue by pointing to the right local header
+           sed -i 's|#include "../sched.h"|#include "sched.h"|' kernel/sched/walt/trace.h || true
 
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
