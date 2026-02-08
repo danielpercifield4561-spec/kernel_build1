@@ -31,33 +31,28 @@ jobs:
 
       - name: Build kernel
         run: |
-          # 1. Prepare environment
           sudo chmod -R 777 $GITHUB_WORKSPACE
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           
+          # Cleaned up args: Notice 'LLVM=1' and 'LLVM_IAS=1' 
+          # These must have the '=1' to work as flags!
           args="ARCH=arm64 \
-                ${{ env.BUILD_ARGS }} \
+                LLVM=1 \
+                LLVM_IAS=1 \
                 CLANG_TRIPLE=aarch64-linux-gnu- \
                 CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
                 CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
           
           cd kernel-source
 
-          # 2. Reset the source to a clean state
+          # 1. Reset
           make mrproper
 
-          # 3. THE FORCE-FEED: Copy the file directly to .config
-          echo "Copying vendor config to root .config..."
+          # 2. Force-feed the config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           
-          # 4. VERIFY: Make sure the file actually exists now
-          if [ ! -f ".config" ]; then
-            echo "❌ ERROR: Failed to copy the config file to root!"
-            exit 1
-          fi
-          echo "✅ .config is in place. Starting build..."
-
-          # 5. Sync the config and start compiling
+          # 3. Refresh and Build
+          # We use the corrected 'args' variable here
           make ${args} oldconfig
           make -j$(nproc --all) ${args}
 
