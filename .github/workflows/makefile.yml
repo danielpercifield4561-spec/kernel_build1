@@ -82,53 +82,44 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. Extraction (Still using the solid Run 249 method)
+          # 1. Standard Extraction
           7z x Kernel.tar.gz.001 -y > /dev/null
           if [ -f "Kernel.tar.gz" ]; then tar -xf Kernel.tar.gz; fi
 
-          # 2. DYNAMIC TOOLCHAIN DISCOVERY
-          echo "🔍 Locating toolchains..."
-          LD_PATH=$(find $(pwd) -name "aarch64-linux-android-ld" | head -n 1)
-          CLANG_PATH=$(find $(pwd) -name "clang" -type f | grep "bin/clang" | head -n 1)
-
-          # Get the directory paths
+          # 2. Toolchain Setup
+          ROOT_DIR=$(pwd)
+          LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)
+          CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)
           CROSS_DIR=$(dirname "$LD_PATH")
-          CLANG_DIR=$(dirname "$CLANG_PATH")
-        
-          # 3. THE MAGIC FIX: Add them to PATH so scripts/gcc-version.sh works
-          export PATH="$CLANG_DIR:$CROSS_DIR:$PATH"
-          export ARCH=arm64
-          export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
-        
-          echo "✅ Path updated. Testing: $(aarch64-linux-android-gcc --version | head -n 1)"
+          CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
+          export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-          # 4. FIXES & PATCHES (WALT Fix)
-          echo "🩹 Applying WALT fix..."
-          find kernel/sched/walt -name "Makefile" -exec sed -i 's|$(src)/|$(srctree)/$(src)/|g' {} +
-
-          # 5. LOAD CONFIG
-          CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
-          cp "$CONFIG_PATH" .config
-
-          # 6. BUILD
-          echo "⚙️ Locking in configuration..."
-          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" \
-             HOSTCC=gcc HOSTCXX=g++ \
-             olddefconfig
-
+          # 3. THE WALT FIX (Force the path to be absolute for Clang)
+          echo "🩹 Fixing WALT trace header paths..."
+          # This tells the trace header to look exactly in kernel/sched/walt
+            sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|' kernel/sched/walt/walt_trace.h
+          # This fixes the Makefile logic that Clang struggles with
+          sed -i 's|$(src)/|$(srctree)/$(src)/|g' kernel/sched/walt/Makefile
+  
+          # 4. LOAD CONFIG
+          cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
+          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
+ 
+          # 5. THE SAFE BUILD (Throttled to prevent Broken Pipe)
           echo "🔥 Starting the compilation..."
-          make -j$(nproc --all) \
+          # Using -j2 to prevent the "Broken Pipe" OOM crash
+          # Disabling Integrated Assembler (IAS=0) to solve LLVM IO failures
+          make -j2 \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
              CC=clang \
              CLANG_TRIPLE=aarch64-linux-gnu- \
+             LD="$LD_PATH" \
              HOSTCC=gcc \
              HOSTCXX=g++ \
              LLVM=1 \
-             LLVM_IAS=1 \
-             KCFLAGS="-Wno-error"
-
-             
+             LLVM_IAS=0 \
+             KCFLAGS="-Wno-error -fno-integrated-as"             
       - name: Final Package and Upload
         run: |
            # 1. Setup AnyKernel3
