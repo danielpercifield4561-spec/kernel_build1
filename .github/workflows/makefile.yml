@@ -18,7 +18,6 @@ jobs:
           echo "KERNEL_SOURCE_BRANCH=$(grep -w "KERNEL_SOURCE_BRANCH" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
           echo "KERNEL_CONFIG=$(grep -w "KERNEL_CONFIG" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
           echo "BUILD_ARGS=$(grep -w "BUILD_ARGS" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
-
    
       - name: Pull toolchain
         run: |
@@ -48,7 +47,6 @@ jobs:
           echo "📂 Checking for Makefile:"
           ls -l Makefile || ls -R | grep Makefile
 
-
       - name: Install Legacy Dependencies
         run: |
           # Add the Ubuntu 20.04 (Focal) repository for legacy libs
@@ -62,28 +60,16 @@ jobs:
         run: |
           cd kernel-source
         
-          # 1. Set the ARCH
+          # FIX: Point the scheduler to the correct trace header path
+          sed -i 's|CFLAGS_trace.o := -I$(src)|CFLAGS_trace.o := -I$(src) -I$(srctree)/$(src)|g' kernel/sched/walt/Makefile
+        
+          # Set your Environment Variables
           export ARCH=arm64
+          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-gnu-
         
-          # 2. Set the path to the toolchain you actually have
-          # We point to the 'bin' folder inside the android-4.9 directory
-          TOOLCHAIN_PATH=$(pwd)/../aarch64-linux-android-4.9/bin
-          export CROSS_COMPILE=$TOOLCHAIN_PATH/aarch64-linux-android-
-        
-          # 3. Add Clang to the path since you have a 'clang' folder
-          export PATH=$(pwd)/../clang/bin:$PATH
-        
-          echo "✅ Using Toolchain: $CROSS_COMPILE"
-        
-          # 4. Run the configuration
-          echo "🚀 Configuring..."
+          # Run your build with the args from your config.env
           make vendor/gta9pwifi_eur_open_defconfig
-        
-          # 5. Build (Using the LLVM arguments from your config.env)
-          echo "🛠️ Building..."
-          make -j$(nproc --all) CC=clang CLANG_TRIPLE=aarch64-linux-gnu- 
-
-
+          make -j$(nproc --all) LLVM=1 LLVM_IAS=1
 
       - name: Final Package and Upload
         run: |
