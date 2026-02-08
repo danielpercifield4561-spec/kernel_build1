@@ -55,28 +55,20 @@ jobs:
           
           # Install the specific versions needed by older Clang
           sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
-         
       - name: Compile Kernel
         run: |
-          # 1. Create the folder the Makefile is looking for
-          # We link 'aarch64-linux-android-4.9' to 'gcc-arm-64'
-          ln -s $(pwd)/aarch64-linux-android-4.9 $(pwd)/gcc-arm-64
+          cd kernel-source
         
-           cd kernel-source
+          # This fix tells the WALT scheduler where to find its trace headers
+          sed -i 's|CFLAGS_trace.o := -I$(src)|CFLAGS_trace.o := -I$(src) -I$(srctree)/$(src)|g' kernel/sched/walt/Makefile
+          
+          export ARCH=arm64
+          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-gnu-
         
-           # 2. Set the toolchain name to match what is inside that folder
-           # Based on your logs, it's likely 'aarch64-linux-android-'
-           export ARCH=arm64
-           export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-android-
-        
-           # 3. Add Clang to path for modern Samsung builds
-           export PATH=$(pwd)/../clang/bin:$PATH
-        
-           echo "🚀 Configuring with vendor path..."
-           make vendor/gta9pwifi_eur_open_defconfig
-        
-           echo "🛠️ Building..."
-           make -j$(nproc --all) CC=clang CLANG_TRIPLE=aarch64-linux-gnu-
+          # Re-run your config and build
+          make vendor/gta9pwifi_eur_open_defconfig
+          make -j$(nproc --all) LLVM=1 LLVM_IAS=1
+
 
       - name: Final Package and Upload
         run: |
