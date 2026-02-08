@@ -26,30 +26,27 @@ jobs:
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
           git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
-      -  name: Reconstruct and Extract Source
-         run: |
-          # 1. Join the Platform parts (if they exist)
-          cat Platform.tar.gz.part-a* > Platform.tar.gz 2>/dev/null || true
+      - name: Reconstruct and Extract Source
+        run: |
+          # 1. Glue the .001, .002, etc. parts back into one file
+          echo "📂 Reassembling Kernel.tar.gz..."
+          cat Kernel.tar.gz.* > Kernel.tar.gz
         
-          # 2. Extract kernel.tar.gz (the main zip)
+          # 2. Create directory and extract
           mkdir -p kernel-source
-          if [ -f "kernel.tar.gz" ]; then
-            echo "📦 Extracting kernel.tar.gz..."
-            tar -xf kernel.tar.gz -C kernel-source --strip-components=1 || tar -xf kernel.tar.gz -C kernel-source
+          echo "📦 Extracting source..."
+          tar -xf Kernel.tar.gz -C kernel-source --strip-components=1 || tar -xf Kernel.tar.gz -C kernel-source
+        
+          # 3. Verify the 'vendor' config exists where you showed me in the photo
+          # Photo 2 showed: Kernel.tar.gz/arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
+          echo "🔍 Checking for vendor config..."
+          if [ -f "kernel-source/arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig" ]; then
+            echo "✅ Config found in vendor folder."
+          else
+            echo "⚠️ Config not found in vendor/ folder, searching..."
+            find kernel-source -name "gta9pwifi_eur_open_defconfig"
           fi
 
-          # 3. Also extract Platform.tar.gz if it was reconstructed
-          if [ -f "Platform.tar.gz" ]; then
-            echo "📦 Extracting Platform.tar.gz..."
-            tar -xf Platform.tar.gz -C kernel-source --strip-components=1 || tar -xf Platform.tar.gz -C kernel-source
-          fi
-        
-          # 4. CRITICAL: Move the config file into the newly extracted folders
-          mkdir -p kernel-source/arch/arm64/configs/vendors
-          cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/
-        
-          # 5. Final check: Does the Makefile exist now?
-          ls -l kernel-source/Makefile
 
       - name: Install Legacy Dependencies
         run: |
