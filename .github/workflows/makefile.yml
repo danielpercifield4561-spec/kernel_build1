@@ -8,6 +8,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Clone Kernel Source
+        run: |
+          # Replace the URL below with the actual source link for your device
+          git clone --depth=1 https://github.com/example-user/android_kernel_samsung_gta9pwifi.git kernel-source
+
       - name: Setup environment
         run: |
           # Use = for everything to match your config.env
