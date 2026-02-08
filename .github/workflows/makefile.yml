@@ -28,16 +28,21 @@ jobs:
           
       - name: Reconstruct and Extract Source
         run: |
-          # 1. Join the parts using the exact names from your repo
+          # 1. Join the parts
           cat Platform.tar.gz.part-a* > Platform.tar.gz
-        
-          # 2. Extract the file
+          
+          # 2. Extract
           mkdir -p kernel-source
           tar -xf Platform.tar.gz -C kernel-source --strip-components=1
         
-          # 3. Verify it worked
-          echo "📂 Contents of kernel-source:"
-          ls -F kernel-source/
+          # 3. FORCE MOVE the defconfig from your repo into the kernel tree
+          # This is the 'missing link' that's causing your error
+          mkdir -p kernel-source/arch/arm64/configs/
+          cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/
+        
+          # 4. Verify it's in the right spot
+          ls kernel-source/arch/arm64/configs/gta9pwifi_eur_open_defconfig
+
 
       - name: Install Legacy Dependencies
         run: |
@@ -47,28 +52,15 @@ jobs:
           
           # Install the specific versions needed by older Clang
           sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
+     
       - name: Compile Kernel
         run: |
-          # 1. Force move into the source directory
-          if [ -d "kernel-source" ]; then
-            cd kernel-source
-          else
-            echo "❌ ERROR: kernel-source directory not found!"
-            ls -R
-            exit 1
-          fi
-
-          # 2. Set necessary paths for the toolchain
-          # This tells the system exactly where your 'aarch64-linux-gnu-' is
-          export PATH=$PATH:$(pwd)/../gcc-arm-64/bin
+          cd kernel-source
           export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-
-          # 3. Clean and Configure
-          echo "📂 Current Directory: $(pwd)"
+          # Adjust the path below to where your toolchain was extracted
+          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-gnu-
+          
           make gta9pwifi_eur_open_defconfig
-
-          # 4. Build (This is where the real work happens)
           make -j$(nproc --all)
 
 
