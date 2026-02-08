@@ -29,32 +29,14 @@ jobs:
         run: |
           git clone --depth=1 ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} kernel-source
 
-      - name: Build kernel
+      - name: Install Legacy Dependencies
         run: |
-          # 1. Install missing legacy libraries
-          sudo apt-get update && sudo apt-get install -y libtinfo5 libncurses5
+          # Add the Ubuntu 20.04 (Focal) repository for legacy libs
+          sudo add-apt-repository 'deb http://azure.archive.ubuntu.com/ubuntu/ focal main universe'
+          sudo apt-get update
           
-          # 2. Setup permissions and paths
-          sudo chmod -R 777 $GITHUB_WORKSPACE
-          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          
-          args="ARCH=arm64 \
-                LLVM=1 \
-                LLVM_IAS=1 \
-                CLANG_TRIPLE=aarch64-linux-gnu- \
-                CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
-                CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
-          
-          cd kernel-source
-          make mrproper
-
-          # 3. Force-feed the config
-          cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
-          
-          # 4. Final Build Attempt
-          make ${args} oldconfig
-          make -j$(nproc --all) ${args}
-
+          # Install the specific versions needed by older Clang
+          sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
 
       - name: Package kernel
         run: |
