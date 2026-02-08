@@ -10,13 +10,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Setup environment
         run: |
-          echo "ANYKERNEL_SOURCE=$(cat config.env | grep -w \"ANYKERNEL_SOURCE\" | head -n 1 | cut -d \"=\" -f 2)" >> $GITHUB_ENV
-          echo "ANYKERNEL_SOURCE_BRANCH=$(cat config.env | grep -w \"ANYKERNEL_SOURCE_BRANCH\" | head -n 1 | cut -d \"=\" -f 2)" >> $GITHUB_ENV
-          echo "KERNEL_SOURCE=$(cat config.env | grep -w \"KERNEL_SOURCE\" | head -n 1 | cut -d \"=\" -f 2)" >> $GITHUB_ENV
-          echo "KERNEL_SOURCE_BRANCH=$(cat config.env | grep -w \"KERNEL_SOURCE_BRANCH\" | head -n 1 | cut -d \"=\" -f 2)" >> $GITHUB_ENV
-          echo "KERNEL_CONFIG=$(grep KERNEL_CONFIG config.env | cut -d '=' -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
-          echo "BUILD_ARGS=$(grep BUILD_ARGS config.env | cut -d '=' -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
-          sudo dpkg --add-architecture i386
+          # Use = for everything to match your config.env
+          echo "ANYKERNEL_SOURCE=$(grep -w "ANYKERNEL_SOURCE" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+          echo "ANYKERNEL_SOURCE_BRANCH=$(grep -w "ANYKERNEL_SOURCE_BRANCH" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+          echo "KERNEL_SOURCE=$(grep -w "KERNEL_SOURCE" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+          echo "KERNEL_SOURCE_BRANCH=$(grep -w "KERNEL_SOURCE_BRANCH" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+          echo "KERNEL_CONFIG=$(grep -w "KERNEL_CONFIG" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+          echo "BUILD_ARGS=$(grep -w "BUILD_ARGS" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+
    
       - name: Pull toolchain
         run: |
