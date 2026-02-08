@@ -28,7 +28,15 @@ jobs:
       - name: Pull kernel source
         run: |
           git clone --depth=1 ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} kernel-source
-      
+
+      - name: Fix Permissions
+        run: |
+          # Give full read/write/execute permissions to everything in the workspace
+          sudo chmod -R 777 $GITHUB_WORKSPACE
+          # Alternatively, just target the specific folders if 777 on everything is too much
+          chmod -R +x $GITHUB_WORKSPACE/clang/bin
+          chmod -R +x $GITHUB_WORKSPACE/kernel-source
+     
       - name: List all available configs
         run: |
           find kernel-source/arch/arm64/configs -name "*defconfig*"
