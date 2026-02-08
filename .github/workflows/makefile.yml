@@ -82,47 +82,40 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. CLEAN EXTRACTION
-          # We extract directly into the root (.) so the Makefile finds its files
-          echo "📦 Extracting source directly to root..."
+          # 1. Extraction (Keeping your successful Run 249 method)
           7z x Kernel.tar.gz.001 -y > /dev/null
-         
-          # If there's a tar.gz inside the 7z, unpack it too
-          if [ -f "Kernel.tar.gz" ]; then
-            tar -xf Kernel.tar.gz
-          fi
+          if [ -f "Kernel.tar.gz" ]; then tar -xf Kernel.tar.gz; fi
 
-          # 2. VERIFY (The Moment of Truth)
-          if [ -f "arch/arm64/Makefile" ]; then
-            echo "✅ arch/arm64/Makefile is exactly where it belongs."
-          else
-            echo "❌ ERROR: Source still not found. Listing all directories:"
-            ls -d */
-            exit 1
-          fi
-
-          # 3. ENVIRONMENT SETUP
-          export ARCH=arm64
+          # 2. Set absolute paths for the toolchains
+          # We don't put them in PATH globally to avoid breaking host tools
           WORKSPACE_ROOT=$(pwd)
-          # Pointing to the folders we saw in your previous 'ls'
-          export CROSS_COMPILE="$WORKSPACE_ROOT/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
-          export PATH="$WORKSPACE_ROOT/clang/bin:$PATH"
-        
-          # 4. LOAD CONFIG
-          echo "🔍 Loading config..."
-          # Finding the config anywhere in the extracted files
+          CLANG_PATH="$WORKSPACE_ROOT/../clang/bin/clang"
+          CLANG_TRIPLE_BIN="$WORKSPACE_ROOT/../clang/bin/"
+          CROSS_BIN="$WORKSPACE_ROOT/../aarch64-linux-android-4.9/bin/aarch64-linux-android-"
+
+          # 3. Load the config
           CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
           cp "$CONFIG_PATH" .config
-        
-          # 5. BUILD
+
+          # 4. RUN CONFIG (Forcing HOSTCC to use system GCC)
+          echo "⚙️ Locking in configuration..."
+          make ARCH=arm64 CROSS_COMPILE=$CROSS_BIN \
+             HOSTCC=gcc HOSTCXX=g++ \
+             olddefconfig
+
+          # 5. START THE BUILD
+          # We explicitly point CC to the Clang folder and keep HOSTCC as gcc
           echo "🔥 Starting the compilation..."
           make -j$(nproc --all) \
-          ARCH=arm64 \
-          CROSS_COMPILE=$CROSS_COMPILE \
-          CC=clang \
-          CLANG_TRIPLE=aarch64-linux-gnu- \
-          LLVM=1 \
-          LLVM_IAS=1
+             ARCH=arm64 \
+             CROSS_COMPILE=$CROSS_BIN \
+             CC=$CLANG_PATH \
+             CLANG_TRIPLE=aarch64-linux-gnu- \
+             HOSTCC=gcc \
+             HOSTCXX=g++ \
+             LLVM=1 \
+             LLVM_IAS=1
+
 
       - name: Final Package and Upload
         run: |
