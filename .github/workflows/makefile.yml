@@ -26,23 +26,30 @@ jobs:
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
           git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
-      - name: Reconstruct and Extract Source
-        run: |
-          # 1. Join the parts
-          cat Platform.tar.gz.part-a* > Platform.tar.gz
+      -  name: Reconstruct and Extract Source
+         run: |
+          # 1. Join the Platform parts (if they exist)
+          cat Platform.tar.gz.part-a* > Platform.tar.gz 2>/dev/null || true
         
-          # 2. Create the folder and extract
+          # 2. Extract kernel.tar.gz (the main zip)
           mkdir -p kernel-source
-          tar -xf Platform.tar.gz -C kernel-source --strip-components=1 || tar -xf Platform.tar.gz -C kernel-source
+          if [ -f "kernel.tar.gz" ]; then
+            echo "📦 Extracting kernel.tar.gz..."
+            tar -xf kernel.tar.gz -C kernel-source --strip-components=1 || tar -xf kernel.tar.gz -C kernel-source
+          fi
+
+          # 3. Also extract Platform.tar.gz if it was reconstructed
+          if [ -f "Platform.tar.gz" ]; then
+            echo "📦 Extracting Platform.tar.gz..."
+            tar -xf Platform.tar.gz -C kernel-source --strip-components=1 || tar -xf Platform.tar.gz -C kernel-source
+          fi
         
-          # 3. FORCE MOVE the config from the repo root into the kernel's config folder
-          # This is the most important line to fix 'No rule to make target'
+          # 4. CRITICAL: Move the config file into the newly extracted folders
           mkdir -p kernel-source/arch/arm64/configs/
           cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/
         
-          # 4. DEBUG: List the folder to prove the file is there
-          echo "📂 Checking for defconfig location:"
-          find kernel-source -name "gta9pwifi_eur_open_defconfig"
+          # 5. Final check: Does the Makefile exist now?
+          ls -l kernel-source/Makefile
 
       - name: Install Legacy Dependencies
         run: |
@@ -57,11 +64,17 @@ jobs:
         run: |
           cd kernel-source
           export ARCH=arm64
-          # Adjust the path below to where your toolchain was extracted
           export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-gnu-
-          
-          make gta9pwifi_eur_open_defconfig
-          make -j$(nproc --all)
+        
+          # 1. Start the config using the VENDOR path found in your photo
+          # This is what matches your config.env settings
+          echo "🚀 Configuring with vendor path..."
+          make vendor/gta9pwifi_eur_open_defconfig
+        
+          # 2. Build with LLVM if your config.env requires it
+          echo "🛠️ Building..."
+          make -j$(nproc --all) LLVM=1 LLVM_IAS=1
+
 
 
       - name: Final Package and Upload
