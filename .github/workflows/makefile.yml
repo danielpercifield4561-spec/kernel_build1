@@ -31,6 +31,7 @@ jobs:
 
       - name: Build kernel
         run: |
+          # 1. Prepare environment
           sudo chmod -R 777 $GITHUB_WORKSPACE
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           
@@ -42,27 +43,22 @@ jobs:
           
           cd kernel-source
 
-          # 1. Clean up everything
+          # 2. Reset the source to a clean state
           make mrproper
 
-          # 2. RENAME/COPY TO A SIMPLE NAME
-          # We search for the file and copy it to a name we KNOW is correct
-          ORIGINAL_FILE=$(find arch/arm64/configs -name "*gta9p*_defconfig" | head -n 1)
+          # 3. THE FORCE-FEED: Copy the file directly to .config
+          echo "Copying vendor config to root .config..."
+          cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           
-          if [ -z "$ORIGINAL_FILE" ]; then
-             echo "❌ Could not find any gta9p config file!"
-             find arch/arm64/configs -maxdepth 3
-             exit 1
+          # 4. VERIFY: Make sure the file actually exists now
+          if [ ! -f ".config" ]; then
+            echo "❌ ERROR: Failed to copy the config file to root!"
+            exit 1
           fi
+          echo "✅ .config is in place. Starting build..."
 
-          echo "Found: $ORIGINAL_FILE. Copying to arch/arm64/configs/tablet_defconfig"
-          cp "$ORIGINAL_FILE" arch/arm64/configs/tablet_defconfig
-
-          # 3. RUN MAKE WITH THE SIMPLE NAME
-          echo "✅ Running make tablet_defconfig..."
-          make ${args} tablet_defconfig
-          
-          # 4. START THE BUILD
+          # 5. Sync the config and start compiling
+          make ${args} oldconfig
           make -j$(nproc --all) ${args}
 
       - name: Package kernel
