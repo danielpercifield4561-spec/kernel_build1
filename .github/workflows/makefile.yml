@@ -84,15 +84,31 @@ jobs:
         run: |
           cd kernel-source
         
-          # Apply the WALT scheduler fix
-          sed -i 's|CFLAGS_trace.o := -I$(src)|CFLAGS_trace.o := -I$(src) -I$(srctree)/$(src)|g' kernel/sched/walt/Makefile
+          # 1. Apply the WALT scheduler fix ONLY if the file exists
+          if [ -f "kernel/sched/walt/Makefile" ]; then
+            echo "✅ Patching WALT Makefile..."
+            sed -i 's|CFLAGS_trace.o := -I$(src)|CFLAGS_trace.o := -I$(src) -I$(srctree)/$(src)|g' kernel/sched/walt/Makefile
+          else
+            echo "⚠️ WALT Makefile not found, skipping patch."
+          fi
+
+          # 2. Fix the toolchain folder name (Symlink)
+          # Your workspace has 'aarch64-linux-android-4.9', but script wants 'gcc-arm-64'
+          ln -s $(pwd)/../aarch64-linux-android-4.9 $(pwd)/../gcc-arm-64 2>/dev/null || true
         
+          # 3. Set compiler variables
           export ARCH=arm64
-          # Point to your GCC toolchain for the rest of the cross-compile
-          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-gnu-
+          # Note: using 'android-' prefix found in your previous logs
+          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-android-
+          export PATH=$(pwd)/../clang/bin:$PATH
         
-          # Now make can find the config we just moved!
+          # 4. Run the configuration
+          echo "🚀 Configuring with vendor path..."
           make vendor/gta9pwifi_eur_open_defconfig
+        
+          # 5. Start the build
+          echo "🛠️ Building..."
+          make -j$(nproc --all) LLVM=1 LLVM_IAS=1
           make -j$(nproc --all) LLVM=1 LLVM_IAS=1
 
       - name: Final Package and Upload
