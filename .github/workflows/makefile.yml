@@ -95,22 +95,24 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-          # 3. THE SLEDGEHAMMER WALT FIX
-          echo "🩹 Force-patching WALT trace paths..."
-          # We target the specific line and replace it regardless of what was there
+          # 3. THE SYMLINK WALT FIX
+          echo "🩹 Creating symlinks for WALT headers..."
+          # Create a physical link in the local directory so ./trace.h ALWAYS works
+          ln -sf kernel/sched/walt/trace.h trace.h
+          ln -sf kernel/sched/walt/walt_trace.h walt_trace.h
+        
+          # Patch the absolute path into the header itself
           find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
-          find kernel/sched/walt -name "Makefile" -exec sed -i 's|ccflags-y += -I$(src)|ccflags-y += -I$(srctree)/$(src)|g' {} +
-          # Extra insurance: Copy the file to the root where the compiler is looking
-          cp kernel/sched/walt/trace.h kernel/sched/walt/walt_trace.h ./ 2>/dev/null || true
 
           # 4. LOAD CONFIG & BUILD (Use -j1 for the link phase)
           echo "⚙️ Configuring..."
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
 
+           # 5. THE ULTIMATE SAFE BUILD
           echo "🔥 Starting the compilation..."
-          # We use -j$(nproc) for speed but keep LLVM_IAS=0 for stability
-          make -j$(nproc --all) \
+          # -j2 is mandatory now to stop the "Broken Pipe" IO failures
+          make -j2 \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
              CC=clang \
@@ -120,7 +122,7 @@ jobs:
              HOSTCXX=g++ \
              LLVM=1 \
              LLVM_IAS=0 \
-             KCFLAGS="-Wno-error -fno-integrated-as"
+             KCFLAGS="-Wno-error -fno-integrated-as -I$(pwd)"
 
              
       - name: Final Package and Upload
