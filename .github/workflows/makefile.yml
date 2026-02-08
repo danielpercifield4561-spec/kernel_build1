@@ -31,11 +31,13 @@ jobs:
 
       - name: Build kernel
         run: |
+          # 1. Install missing legacy libraries
+          sudo apt-get update && sudo apt-get install -y libtinfo5 libncurses5
+          
+          # 2. Setup permissions and paths
           sudo chmod -R 777 $GITHUB_WORKSPACE
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           
-          # Cleaned up args: Notice 'LLVM=1' and 'LLVM_IAS=1' 
-          # These must have the '=1' to work as flags!
           args="ARCH=arm64 \
                 LLVM=1 \
                 LLVM_IAS=1 \
@@ -44,17 +46,15 @@ jobs:
                 CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
           
           cd kernel-source
-
-          # 1. Reset
           make mrproper
 
-          # 2. Force-feed the config
+          # 3. Force-feed the config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           
-          # 3. Refresh and Build
-          # We use the corrected 'args' variable here
+          # 4. Final Build Attempt
           make ${args} oldconfig
           make -j$(nproc --all) ${args}
+
 
       - name: Package kernel
         run: |
