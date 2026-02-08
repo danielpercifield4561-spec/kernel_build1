@@ -30,6 +30,22 @@ jobs:
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
           git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
+      - name: Reconstruct and Extract Source
+        run: |
+          # 1. Join the parts back into the original file
+          cat part_* > Platform.tar.gz
+          
+          # 2. Unpack the full source
+          tar -xf Platform.tar.gz
+          
+          # 3. Create the 'kernel-source' folder and move everything inside
+          # This ensures folders like 'arch' and 'drivers' are where 'make' expects them
+          mkdir -p kernel-source
+          mv arch block crypto drivers fs include init ipc kernel lib mm net scripts security sound techpack tools usr virt Makefile Kconfig kernel-source/ 2>/dev/null || true
+          
+          # 4. Final check: This MUST show 'arch' and 'Makefile'
+          ls -F kernel-source/
+      
       - name: Pull kernel source
         run: |
           git clone --depth=1 ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} kernel-source
