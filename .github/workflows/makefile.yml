@@ -17,10 +17,6 @@ jobs:
           echo "KERNEL_CONFIG=$(grep KERNEL_CONFIG config.env | cut -d '=' -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
           echo "BUILD_ARGS=$(grep BUILD_ARGS config.env | cut -d '=' -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
           sudo dpkg --add-architecture i386
-          sudo add-apt-repository "universe"
-          sudo apt-get update
-          sudo apt-get install -y libncurses5:i386
-          sudo apt-get install -y libselinux-dev
    
       - name: Pull toolchain
         run: |
