@@ -31,36 +31,37 @@ jobs:
 
       - name: Build kernel
         run: |
+      - name: Build kernel
+        run: |
           sudo chmod -R 777 $GITHUB_WORKSPACE
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           
+          # Remove O=out for now to ensure the config lands in the main directory
           args="ARCH=arm64 \
-                O=out \
                 ${{ env.BUILD_ARGS }} \
                 CLANG_TRIPLE=aarch64-linux-gnu- \
                 CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
                 CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
           
           cd kernel-source
-          mkdir -p out
 
-          # 1. SUPER SEARCH: Find any config containing 'gta9p'
-          echo "Scanning for your config file..."
-          FOUND_FILE=$(find arch/arm64/configs -name "*gta9p*" | head -n 1)
+          # 1. Generate the config
+          echo "Generating config using: vendor/${{ env.KERNEL_CONFIG }}"
+          make ${args} vendor/${{ env.KERNEL_CONFIG }}
           
-          if [ -z "$FOUND_FILE" ]; then
-            echo "--- LISTING ALL CONFIGS (FIND THE RIGHT ONE HERE) ---"
-            ls -R arch/arm64/configs/
+          # 2. PROOF OF LIFE: Check if .config exists in the current folder
+          if [ -f ".config" ]; then
+            echo "✅ .config successfully created!"
+            head -n 10 .config
+          else
+            echo "❌ ERROR: .config NOT FOUND in $(pwd)"
+            ls -a
             exit 1
           fi
 
-          # Clean the path for the make command
-          REAL_CONFIG=$(echo "$FOUND_FILE" | sed 's|arch/arm64/configs/||')
-          echo "Targeting config: $REAL_CONFIG"
-
-          # 2. RUN MAKE
-          make ${args} $REAL_CONFIG
+          # 3. Start the heavy lifting
           make -j$(nproc --all) ${args}
+
 
 
       - name: Package kernel
