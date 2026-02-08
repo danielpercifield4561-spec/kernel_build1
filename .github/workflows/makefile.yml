@@ -115,12 +115,14 @@ jobs:
           cp "$CONFIG_PATH" .config
         
           # 5. BUILD
-          echo "⚙️ Locking in configuration..."
-          make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE olddefconfig
-        
           echo "🔥 Starting the compilation..."
-          make -j$(nproc --all) ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE LLVM=1 LLVM_IAS=1
-
+          make -j$(nproc --all) \
+          ARCH=arm64 \
+          CROSS_COMPILE=$CROSS_COMPILE \
+          CC=clang \
+          CLANG_TRIPLE=aarch64-linux-gnu- \
+          LLVM=1 \
+          LLVM_IAS=1
 
       - name: Final Package and Upload
         run: |
