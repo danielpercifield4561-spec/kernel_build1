@@ -28,19 +28,24 @@ jobs:
           
       - name: Reconstruct and Extract Source
         run: |
-          # 1. Join the parts back into the original file
-          cat part_* > Platform.tar.gz
-          
-          # 2. Unpack the full source
+          # 1. Search for your parts (case-insensitive)
+          FILES=$(find . -iname "part_*" | sort)
+        
+          if [ -z "$FILES" ]; then
+           echo "❌ ERROR: No part files found in the repo!"
+          ls -R
+          exit 1
+          fi
+        
+          # 2. Join the parts found
+          cat $FILES > Platform.tar.gz
+          echo "✅ Successfully reconstructed Platform.tar.gz"
+        
+          # 3. Extract and Organize
           tar -xf Platform.tar.gz
-          
-          # 3. Create the 'kernel-source' folder and move everything inside
-          # This ensures folders like 'arch' and 'drivers' are where 'make' expects them
           mkdir -p kernel-source
           mv arch block crypto drivers fs include init ipc kernel lib mm net scripts security sound techpack tools usr virt Makefile Kconfig kernel-source/ 2>/dev/null || true
-          
-          # 4. Final check: This MUST show 'arch' and 'Makefile'
-          ls -F kernel-source/
+
       
       - name: Pull kernel source
         run: |
