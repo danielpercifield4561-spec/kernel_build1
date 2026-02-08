@@ -95,22 +95,27 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-                   # 3. ROBUST WALT PATCHING (No-Loop Version)
-           echo "🩹 Detecting and fixing WALT headers..."
+          # 3. ROBUST WALT PATCHING (Permission-Aware)
+          echo "🩹 Detecting and fixing WALT headers..."
         
-           # 1. Find the actual trace file
-           WALT_TRACE_FILE=$(find kernel/sched/walt -name "*trace.h" | head -n 1)
+          # 1. Find the actual trace file
+          WALT_TRACE_FILE=$(find kernel/sched/walt -name "*trace.h" | head -n 1)
         
-           if [ -z "$WALT_TRACE_FILE" ]; then
-           echo "❌ ERROR: Could not find WALT trace file!"
-           exit 1
-           fi
-           echo "📍 Found trace file at: $WALT_TRACE_FILE"
+          if [ -z "$WALT_TRACE_FILE" ]; then
+          echo "❌ ERROR: Could not find WALT trace file!"
+          exit 1
+          fi
+          echo "📍 Found trace file at: $WALT_TRACE_FILE"
 
-          # 2. Create the internal symlink ONLY if needed
+          # 2. UNLOCK PERMISSIONS
+          # Grant write permission to ensure we can modify the file
+          chmod +w "$WALT_TRACE_FILE"
+          echo "🔓 Permissions unlocked for $WALT_TRACE_FILE"
+ 
+          # 3. Create the internal symlink ONLY if needed
           WALT_DIR=$(dirname "$WALT_TRACE_FILE")
           WALT_BASE=$(basename "$WALT_TRACE_FILE")
-        
+          
           if [ "$WALT_BASE" != "trace.h" ]; then
             ln -sf "$WALT_BASE" "$WALT_DIR/trace.h"
             echo "🔗 Created symlink: $WALT_DIR/trace.h -> $WALT_BASE"
@@ -118,21 +123,19 @@ jobs:
             echo "ℹ️ File is already named trace.h, skipping symlink."
           fi
 
-          # 3. Inject Forward Declarations & MAX_CLUSTERS
-          # We use a temporary file to avoid reading from the file we are writing to
-          printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
+          # 4. Inject Forward Declarations & MAX_CLUSTERS
+           printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
         
-          # Copy original to a temp location, then rebuild
           cp "$WALT_TRACE_FILE" original_trace.h.bak
           cat header_fix.txt original_trace.h.bak > "$WALT_TRACE_FILE"
           rm header_fix.txt original_trace.h.bak
 
-          # 4. Fix the Trace Include Path
+          # 5. Fix the Trace Include Path
           if grep -q "TRACE_INCLUDE_PATH" "$WALT_TRACE_FILE"; then
           sed -i 's|#define TRACE_INCLUDE_PATH .*|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' "$WALT_TRACE_FILE"
           echo "✅ Patched TRACE_INCLUDE_PATH"
           fi
-
+ 
           echo "🔍 Verifying first 10 lines of $WALT_TRACE_FILE:"
           head -n 10 "$WALT_TRACE_FILE"
 
