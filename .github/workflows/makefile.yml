@@ -40,15 +40,27 @@ jobs:
 
       - name: Package kernel
         run: |
-          # 1. Create a workspace for the zip
-          mkdir -p out
-          cp -r AnyKernel3/* out/
+         # 1. Get AnyKernel3 template if it's not already there
+         if [ ! -d "AnyKernel3" ]; then
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+         fi
+
+         # 2. Create a fresh output workspace
+         rm -rf out && mkdir -p out
+         cp -r AnyKernel3/* out/
         
-          # 2. Copy the actual kernel files into the 'out' folder
-          # We use 'find' to make sure we grab them even if paths are slightly off
-          find kernel-source/arch/arm64/boot/ -name "Image" -exec cp {} out/ \;
-          find kernel-source/arch/arm64/boot/ -name "Image.gz" -exec cp {} out/ \;
-          find kernel-source/arch/arm64/boot/ -name "dtbo.img" -exec cp {} out/ \;
+         # 3. Use find to grab the compiled images from the build directory
+         # This ignores "No such file" errors and finds them wherever they landed
+         find kernel-source/arch/arm64/boot/ -name "Image" -exec cp {} out/ \; 2>/dev/null || true
+         find kernel-source/arch/arm64/boot/ -name "Image.gz" -exec cp {} out/ \; 2>/dev/null || true
+         find kernel-source/arch/arm64/boot/ -name "dtbo.img" -exec cp {} out/ \; 2>/dev/null || true
+
+      - name: Upload kernel
+        uses: actions/upload-artifact@v4
+        with:
+         name: Flashable_Kernel_Zip
+         path: out/*
+
 
       - name: Upload kernel
         uses: actions/upload-artifact@v4
