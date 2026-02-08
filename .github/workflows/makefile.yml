@@ -82,61 +82,52 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. Extraction (The method that worked)
+          # 1. Extraction (Still using the solid Run 249 method)
           7z x Kernel.tar.gz.001 -y > /dev/null
           if [ -f "Kernel.tar.gz" ]; then tar -xf Kernel.tar.gz; fi
 
-          # 2. DEFINING ABSOLUTE PATHS
-          # We find the folders right here in the current directory
-          ROOT_DIR=$(pwd)
-        
-          # Check if the toolchain is here or in the parent
-          if [ -d "$ROOT_DIR/aarch64-linux-android-4.9" ]; then
-              TC_BASE="$ROOT_DIR/aarch64-linux-android-4.9"
-          else
-            TC_BASE="$ROOT_DIR/../aarch64-linux-android-4.9"
-          fi
-        
-          CROSS_BIN="$TC_BASE/bin/aarch64-linux-android-"
-          CLANG_BIN="$ROOT_DIR/clang/bin/clang"
-        
-          # 3. VERIFICATION (Check if the linker is actually there)
-          if [ ! -f "${CROSS_BIN}ld" ]; then
-            echo "❌ ERROR: Linker not found at ${CROSS_BIN}ld"
-            echo "Searching for it..."
-            find $ROOT_DIR -name "aarch64-linux-android-ld"
-            exit 1
-          fi
-          echo "✅ Linker found at ${CROSS_BIN}ld"
+          # 2. DYNAMIC TOOLCHAIN DISCOVERY
+          echo "🔍 Locating toolchains..."
+          LD_PATH=$(find $(pwd) -name "aarch64-linux-android-ld" | head -n 1)
+          CLANG_PATH=$(find $(pwd) -name "clang" -type f | grep "bin/clang" | head -n 1)
 
-          # 4. LOAD CONFIG
-          CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
-            cp "$CONFIG_PATH" .config
+          # Get the directory paths
+          CROSS_DIR=$(dirname "$LD_PATH")
+          CLANG_DIR=$(dirname "$CLANG_PATH")
         
-           # 4. FIXES & PATCHES
+          # 3. THE MAGIC FIX: Add them to PATH so scripts/gcc-version.sh works
+          export PATH="$CLANG_DIR:$CROSS_DIR:$PATH"
+          export ARCH=arm64
+          export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
+        
+          echo "✅ Path updated. Testing: $(aarch64-linux-android-gcc --version | head -n 1)"
+
+          # 4. FIXES & PATCHES (WALT Fix)
           echo "🩹 Applying WALT fix..."
           find kernel/sched/walt -name "Makefile" -exec sed -i 's|$(src)/|$(srctree)/$(src)/|g' {} +
-        
-          # 5. START THE BUILD
+
+          # 5. LOAD CONFIG
+          CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+          cp "$CONFIG_PATH" .config
+
+          # 6. BUILD
+          echo "⚙️ Locking in configuration..."
+          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" \
+             HOSTCC=gcc HOSTCXX=g++ \
+             olddefconfig
+
           echo "🔥 Starting the compilation..."
           make -j$(nproc --all) \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
-             CC="$CLANG_PATH" \
+             CC=clang \
              CLANG_TRIPLE=aarch64-linux-gnu- \
-             LD="$LD_PATH" \
              HOSTCC=gcc \
              HOSTCXX=g++ \
              LLVM=1 \
              LLVM_IAS=1 \
              KCFLAGS="-Wno-error"
 
-          # 5. RUN CONFIG & BUILD
-          echo "⚙️ Locking in configuration..."
-          # We pass the paths directly into the command line to override Makefile hardcodes
-          make ARCH=arm64 CROSS_COMPILE="$CROSS_BIN" \
-             HOSTCC=gcc HOSTCXX=g++ \
-             olddefconfig
              
       - name: Final Package and Upload
         run: |
