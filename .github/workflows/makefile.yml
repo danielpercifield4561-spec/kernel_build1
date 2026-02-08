@@ -95,29 +95,23 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-                  # 3. THE DEEP HEADER PATCH
-          echo "🩹 Patching headers for Clang compatibility..."
+                  # 3. THE CLEAN PATH FIX
+          echo "🩹 Setting up header search paths..."
+          # Clean up any previous symlinks or messy patches
+          rm -f trace.h walt_trace.h
         
-          # Create the symlink like before
+          # Create a clean symlink for the trace system
           ln -sf kernel/sched/walt/trace.h trace.h
-        
-          # SLEDGEHAMMER: Inject missing headers into the top of trace.h 
-          # This ensures 'struct rq' and 'MAX_CLUSTERS' are always defined.
-          sed -i '1i #include <linux/sched.h>\n#include <../kernel/sched/sched.h>' kernel/sched/walt/trace.h
-        
-          # Fix the internal include path
-          find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
 
 
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
 
-                  # 5. THE DIAGNOSTIC BUILD
+                  # 5. THE STABILIZED FINAL BUILD
           echo "🔥 Starting the compilation..."
-          echo "Writing logs to build.log to prevent pipe crashes..."
-        
-          make -j2 \
+          # Using -j1 for maximum stability in the linking phase
+          make -j1 \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
              CC=clang \
@@ -127,8 +121,7 @@ jobs:
              HOSTCXX=g++ \
              LLVM=1 \
              LLVM_IAS=0 \
-             KCFLAGS="-Wno-error -fno-integrated-as -ferror-limit=0 -g0 -w -I$(pwd)" \
-             > build.log 2>&1 || touch build_failed.txt
+             KCFLAGS="-Wno-error -fno-integrated-as -ferror-limit=0 -g0 -I$(pwd)"
 
           # 6. THE AUTO-DETECTION
           if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
