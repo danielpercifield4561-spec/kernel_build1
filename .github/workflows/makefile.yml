@@ -84,35 +84,35 @@ jobs:
         run: |
           cd kernel-source
         
-          # 1. FIX: Find the config file automatically, no matter where it is
-          echo "🔍 Hunting for the config file..."
-          CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+          # 1. CRITICAL: Set the Architecture variables FIRST
+          export ARCH=arm64
+          # We know your toolchain is in 'aarch64-linux-android-4.9' based on logs
+          export CROSS_COMPILE=$(pwd)/../aarch64-linux-android-4.9/bin/aarch64-linux-android-
+          export PATH=$(pwd)/../clang/bin:$PATH
         
+          # 2. Find and Load the Config
+          echo "🔍 Hunting for config..."
+          CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+          
           if [ -z "$CONFIG_PATH" ]; then
-            echo "❌ CRITICAL: Config file not found in source!"
-            # List configs so we can see what IS there in the logs
-            ls -R arch/arm64/configs
-            exit 1
+             echo "❌ CRITICAL: Config file not found!"
+             exit 1
           fi
         
           echo "✅ Found config at: $CONFIG_PATH"
-        
-          # 2. FORCE LOAD: Copy it directly to .config to bypass "No rule" errors
           cp "$CONFIG_PATH" .config
-          # This command updates the .config without asking questions
+        
+          # 3. Now run the config update (This will work now that ARCH is set)
+          echo "⚙️  Locking in configuration..."
           make olddefconfig
 
-          # 3. Toolchain Safety Net (from previous fix)
+          # 4. Create the symlink just in case internal Makefiles reference it
           ln -s $(pwd)/../aarch64-linux-android-4.9 $(pwd)/../gcc-arm-64 2>/dev/null || true
         
-          # 4. Set Variables
-          export ARCH=arm64
-          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-android-
-          export PATH=$(pwd)/../clang/bin:$PATH
-        
           # 5. Build
-          echo "🛠️ Starting Compilation..."
+          echo "🔥 Starting the compilation..."
           make -j$(nproc --all) LLVM=1 LLVM_IAS=1
+
 
       - name: Final Package and Upload
         run: |
