@@ -31,19 +31,18 @@ jobs:
           # 1. Join the parts
           cat Platform.tar.gz.part-a* > Platform.tar.gz
         
-          # 2. Extract
+          # 2. Create the folder and extract
           mkdir -p kernel-source
-          tar -xf Platform.tar.gz -C kernel-source --strip-components=1
+          tar -xf Platform.tar.gz -C kernel-source --strip-components=1 || tar -xf Platform.tar.gz -C kernel-source
         
-          # 3. MOVE the config from your repo into the correct kernel folder
-          # This is the step that fixes the 'No rule to make target' error
+          # 3. FORCE MOVE the config from the repo root into the kernel's config folder
+          # This is the most important line to fix 'No rule to make target'
           mkdir -p kernel-source/arch/arm64/configs/
           cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/
         
-          # 4. Final check: ensure the file is where it belongs
-          ls kernel-source/arch/arm64/configs/gta9pwifi_eur_open_defconfig
-
-
+          # 4. DEBUG: List the folder to prove the file is there
+          echo "📂 Checking for defconfig location:"
+          find kernel-source -name "gta9pwifi_eur_open_defconfig"
 
       - name: Install Legacy Dependencies
         run: |
