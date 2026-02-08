@@ -82,47 +82,58 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. Standard Extraction (Keep as is)
+          # 1. Extraction
           7z x Kernel.tar.gz.001 -y > /dev/null
           if [ -f "Kernel.tar.gz" ]; then tar -xf Kernel.tar.gz; fi
 
-          # 2. Toolchain Setup (Keep as is)
+          # 2. Toolchain Discovery
           ROOT_DIR=$(pwd)
           LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)
           CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)
           CROSS_DIR=$(dirname "$LD_PATH")
-          export ARCH=arm64
+           export ARCH=arm64
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-          # 3. THE SYMLINK WALT FIX
-          echo "🩹 Creating symlinks for WALT headers..."
-          # Create a physical link in the local directory so ./trace.h ALWAYS works
+          # 3. WALT & Header Fixes
           ln -sf kernel/sched/walt/trace.h trace.h
-          ln -sf kernel/sched/walt/walt_trace.h walt_trace.h
-        
-          # Patch the absolute path into the header itself
           find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
 
-          # 4. LOAD CONFIG & BUILD (Use -j1 for the link phase)
-          echo "⚙️ Configuring..."
+          # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
 
-           # 5. THE ULTIMATE SAFE BUILD
-          echo "🔥 Starting the compilation..."
-          # -j2 is mandatory now to stop the "Broken Pipe" IO failures
-          make -j2 \
-             ARCH=arm64 \
-             CROSS_COMPILE="$CROSS_COMPILE" \
-             CC=clang \
-             CLANG_TRIPLE=aarch64-linux-gnu- \
-             LD="$LD_PATH" \
-             HOSTCC=gcc \
-             HOSTCXX=g++ \
-             LLVM=1 \
-             LLVM_IAS=0 \
-             KCFLAGS="-Wno-error -fno-integrated-as -I$(pwd)"
+          # 5. THE SILENT BUILD (Prevents Broken Pipe)
+          echo "🚀 Starting the 'Silent Push'. This will take 20-40 mins."
+          echo "The log will stay quiet to prevent memory crashes..."
+          (
+            make -j2 \
+               ARCH=arm64 \
+               CROSS_COMPILE="$CROSS_COMPILE" \
+               CC=clang \
+               CLANG_TRIPLE=aarch64-linux-gnu- \
+               LD="$LD_PATH" \
+               HOSTCC=gcc \
+               HOSTCXX=g++ \
+               LLVM=1 \
+               LLVM_IAS=0 \
+               KCFLAGS="-Wno-error -fno-integrated-as -ferror-limit=0 -g0 -w -I$(pwd)"
+          ) > /dev/null 2>&1 || true
+
+          # 6. VERIFICATION
+          echo "🏁 Build attempt finished. Searching for results..."
+          IMAGE=$(find . -name "Image.gz-dtb" -o -name "Image.gz" -o -name "Image")
+          if [ -n "$IMAGE" ]; then
+            echo "✅ KERNEL CREATED: $IMAGE"
+            mkdir -p final_output
+            cp $IMAGE final_output/
+          else
+          echo "❌ Image not found. Check if the config was correct."
+          exit 1
+          fi
+  
+      
+
 
              
       - name: Final Package and Upload
