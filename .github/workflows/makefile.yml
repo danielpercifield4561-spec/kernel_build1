@@ -95,25 +95,26 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-          # 3. CLEAN WALT FIX (No root symlinks to avoid driver pollution)
-          echo "🩹 Cleaning up and applying isolated WALT fix..."
-          rm -f trace.h walt_trace.h  # Remove the problematic root links
+           # 3. ISOLATED WALT PATCHING
+           echo "🩹 Fixing WALT paths and headers..."
+           # Remove any previous symlinks to start fresh
+           rm -f trace.h walt_trace.h
         
-          # Patch the absolute path into the WALT headers where they belong
-          find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
+           # Patch the trace include path for the stringify macro
+           find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
         
-          # Inject the actual scheduler headers into the WALT trace file
-          # This fixes 'struct rq' and 'MAX_CLUSTERS' within the WALT context only
-          sed -i '1i #include <linux/sched.h>\n#include <linux/sched/clock.h>\n#include "sched.h"' kernel/sched/walt/trace.h
+           # Inject the necessary headers with the correct relative path for 'sched.h'
+           # This fixes the 'struct rq' and 'MAX_CLUSTERS' errors
+           sed -i '1i #include <linux/sched.h>\n#include <linux/sched/clock.h>\n#include "../sched.h"' kernel/sched/walt/trace.h
 
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
 
-          # 5. THE STABILIZED BUILD (Isolated)
-          echo "🔥 Starting the compilation..."
-          # We REMOVE -I$(pwd) from KCFLAGS so drivers don't accidentally find the WALT trace
-          make -j2 \
+          # 5. THE STABILIZED SINGLE-CORE BUILD
+          echo "🔥 Starting the marathon build..."
+          # Using -j1 is the only way to stop the "Broken Pipe" IO failures on this runner
+          make -j1 \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
              CC=clang \
@@ -123,7 +124,7 @@ jobs:
              HOSTCXX=g++ \
              LLVM=1 \
              LLVM_IAS=0 \
-             KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration"
+             KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration -ferror-limit=1""
 
           # 6. THE AUTO-DETECTION
           if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
