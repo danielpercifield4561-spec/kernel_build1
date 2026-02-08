@@ -32,8 +32,6 @@ jobs:
       - name: Build kernel
         run: |
           sudo chmod -R 777 $GITHUB_WORKSPACE
-          find kernel-source/arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
-          sudo chmod -R 777 $GITHUB_WORKSPACE
           git clone "https://github.com/danielpercifield4561-spec/defconfig/edit/main/gta9pwifi_eur_open_defconfig"
               menuconfig
                 ${{ env.BUILD_ARGS }} \
