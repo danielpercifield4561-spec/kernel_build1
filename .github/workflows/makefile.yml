@@ -98,24 +98,35 @@ jobs:
            # 3. ROBUST WALT PATCHING
           echo "🩹 Detecting and fixing WALT headers..."
         
-          # 1. Find the actual trace file (might be trace.h or walt_trace.h)
+          # 1. Find the actual trace file
           WALT_TRACE_FILE=$(find kernel/sched/walt -name "*trace.h" | head -n 1)
+        
+          if [ -z "$WALT_TRACE_FILE" ]; then
+          echo "❌ ERROR: Could not find WALT trace file!"
+          exit 1
+          fi
           echo "📍 Found trace file at: $WALT_TRACE_FILE"
 
-          # 2. Create the internal symlink so the compiler finds it as './trace.h'
-          # We do this inside the directory to keep it isolated
+          # 2. Create the internal symlink
           WALT_DIR=$(dirname "$WALT_TRACE_FILE")
           ln -sf $(basename "$WALT_TRACE_FILE") "$WALT_DIR/trace.h"
-  
-          # 3. Inject the Forward Declarations and MAX_CLUSTERS fix
-          # This keeps Clang happy about types and cluster definitions
+          echo "🔗 Created symlink: $WALT_DIR/trace.h -> $(basename "$WALT_TRACE_FILE")"
+
+          # 3. Inject Forward Declarations & MAX_CLUSTERS
           printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
           cat header_fix.txt "$WALT_TRACE_FILE" > trace_fixed.tmp
           mv trace_fixed.tmp "$WALT_TRACE_FILE"
           rm header_fix.txt
 
-          # 4. Fix the Trace Include Path for the macro expansion
-          sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' "$WALT_TRACE_FILE"
+          # 4. Fix the Trace Include Path (Conditional check)
+          if grep -q "TRACE_INCLUDE_PATH" "$WALT_TRACE_FILE"; then
+          sed -i 's|#define TRACE_INCLUDE_PATH .*|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' "$WALT_TRACE_FILE"
+          echo "✅ Patched TRACE_INCLUDE_PATH"
+          fi
+
+          # 5. VERIFY (Prints first 12 lines to your log for peace of mind)
+            echo "🔍 Verifying patch..."
+          head -n 12 "$WALT_TRACE_FILE"
        
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
