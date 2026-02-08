@@ -38,25 +38,33 @@ jobs:
           # Install the specific versions needed by older Clang
           sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
 
-      - name: Package kernel
+      - name: Final Package and Upload
         run: |
-         # 1. Get AnyKernel3 template if it's not already there
-         if [ ! -d "AnyKernel3" ]; then
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-         fi
+           # 1. Setup AnyKernel3
+           [ -d "AnyKernel3" ] || git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+           mkdir -p out
+           cp -r AnyKernel3/* out/
 
-         # 2. Create a fresh output workspace
-         rm -rf out && mkdir -p out
-         cp -r AnyKernel3/* out/
-        
-         # 3. Use find to grab the compiled images from the build directory
-         # This ignores "No such file" errors and finds them wherever they landed
-         find kernel-source/arch/arm64/boot/ -name "Image" -exec cp {} out/ \; 2>/dev/null || true
-         find kernel-source/arch/arm64/boot/ -name "Image.gz" -exec cp {} out/ \; 2>/dev/null || true
-         find kernel-source/arch/arm64/boot/ -name "dtbo.img" -exec cp {} out/ \; 2>/dev/null || true
+           # 2. Search EVERYWHERE for the kernel image
+           echo "Searching for kernel files..."
+           # This looks for files named 'Image' or 'Image.gz' in the entire workspace
+           KERNEL_FILE=$(find . -type f -name "Image" -o -name "Image.gz" | head -n 1)
+           DTBO_FILE=$(find . -type f -name "dtbo.img" | head -n 1)
 
-      - name: Upload kernel
+           if [ -z "$KERNEL_FILE" ]; then
+           echo "❌ ERROR: No kernel image found! Check your build logs for compilation errors."
+           exit 1
+           else
+           echo "✅ Found kernel at: $KERNEL_FILE"
+           cp "$KERNEL_FILE" out/
+           [ -f "$DTBO_FILE" ] && cp "$DTBO_FILE" out/ && echo "✅ Found DTBO at: $DTBO_FILE"
+           fi
+
+           #3. Final check 
+           li -lh out/
+      - name: Upload Flashable Zip
         uses: actions/upload-artifact@v4
         with:
          name: Flashable_Kernel_Zip
          path: out/*
+           
