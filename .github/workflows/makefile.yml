@@ -82,35 +82,35 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. Standard Extraction
+          # 1. Standard Extraction (Keep as is)
           7z x Kernel.tar.gz.001 -y > /dev/null
           if [ -f "Kernel.tar.gz" ]; then tar -xf Kernel.tar.gz; fi
 
-          # 2. Toolchain Setup
+          # 2. Toolchain Setup (Keep as is)
           ROOT_DIR=$(pwd)
           LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)
           CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)
           CROSS_DIR=$(dirname "$LD_PATH")
-        
-          # Define these clearly for the shell
           export ARCH=arm64
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-          # 3. THE WALT FIX (The 'Sanity' Check version)
-          echo "🩹 Fixing WALT trace header paths..."
-          [ -f kernel/sched/walt/walt_trace.h ] && sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|' kernel/sched/walt/walt_trace.h
-          [ -f kernel/sched/walt/Makefile ] && sed -i 's|$(src)/|$(srctree)/$(src)/|g' kernel/sched/walt/Makefile
+          # 3. THE SLEDGEHAMMER WALT FIX
+          echo "🩹 Force-patching WALT trace paths..."
+          # We target the specific line and replace it regardless of what was there
+          find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
+          find kernel/sched/walt -name "Makefile" -exec sed -i 's|ccflags-y += -I$(src)|ccflags-y += -I$(srctree)/$(src)|g' {} +
+          # Extra insurance: Copy the file to the root where the compiler is looking
+          cp kernel/sched/walt/trace.h kernel/sched/walt/walt_trace.h ./ 2>/dev/null || true
 
-          # 4. LOAD CONFIG
+          # 4. LOAD CONFIG & BUILD (Use -j1 for the link phase)
           echo "⚙️ Configuring..."
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
 
-          # 5. THE SAFE BUILD
           echo "🔥 Starting the compilation..."
-          # -j2 is the 'Sweet Spot' for GitHub's free runners to avoid crashing on memory-heavy linking
-          make -j2 \
+          # We use -j$(nproc) for speed but keep LLVM_IAS=0 for stability
+          make -j$(nproc --all) \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
              CC=clang \
@@ -121,6 +121,7 @@ jobs:
              LLVM=1 \
              LLVM_IAS=0 \
              KCFLAGS="-Wno-error -fno-integrated-as"
+
              
       - name: Final Package and Upload
         run: |
