@@ -82,37 +82,42 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. FORCE THE MOVE
-          # Instead of copying, we move everything to ensure no path confusion.
-          echo "🚚 Moving all files to root..."
-          mv kernel-source/* . || true
-        
-          # 2. VERIFY CRITICAL FILES
-          # Let's check if the file the error mentioned actually exists now.
+          # 1. CLEAN EXTRACTION
+          # We extract directly into the root (.) so the Makefile finds its files
+          echo "📦 Extracting source directly to root..."
+          7z x Kernel.tar.gz.001 -y > /dev/null
+         
+          # If there's a tar.gz inside the 7z, unpack it too
+          if [ -f "Kernel.tar.gz" ]; then
+            tar -xf Kernel.tar.gz
+          fi
+
+          # 2. VERIFY (The Moment of Truth)
           if [ -f "arch/arm64/Makefile" ]; then
-            echo "✅ arch/arm64/Makefile found!"
+            echo "✅ arch/arm64/Makefile is exactly where it belongs."
           else
-            echo "❌ ERROR: arch/arm64/Makefile is STILL missing!"
-            find . -name "Makefile" | head -n 20
+            echo "❌ ERROR: Source still not found. Listing all directories:"
+            ls -d */
             exit 1
           fi
 
-          # 3. SET ENVIRONMENT (Absolute Paths)
+          # 3. ENVIRONMENT SETUP
           export ARCH=arm64
           WORKSPACE_ROOT=$(pwd)
-          export CROSS_COMPILE="$WORKSPACE_ROOT/../aarch64-linux-android-4.9/bin/aarch64-linux-android-"
-          export PATH="$WORKSPACE_ROOT/../clang/bin:$PATH"
+          # Pointing to the folders we saw in your previous 'ls'
+          export CROSS_COMPILE="$WORKSPACE_ROOT/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
+          export PATH="$WORKSPACE_ROOT/clang/bin:$PATH"
         
           # 4. LOAD CONFIG
           echo "🔍 Loading config..."
-          cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config || exit 1
+          # Finding the config anywhere in the extracted files
+          CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+          cp "$CONFIG_PATH" .config
         
-          # 5. LOCK IT IN
-          # We pass ARCH and CROSS_COMPILE directly into the make command to be safe
+          # 5. BUILD
           echo "⚙️ Locking in configuration..."
           make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE olddefconfig
-
-          # 6. BUILD
+        
           echo "🔥 Starting the compilation..."
           make -j$(nproc --all) ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE LLVM=1 LLVM_IAS=1
 
