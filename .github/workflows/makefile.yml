@@ -95,27 +95,22 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-           # 3. SURGICAL WALT PATCHING
+           # 3. SURGICAL WALT PATCHING (Simplified)
            echo "🩹 Applying surgical header fixes..."
-           rm -f trace.h walt_trace.h
         
-           # Patch the trace include path
+           # Patch the trace include path inside the header
            find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
         
-           # Instead of including everything, we just "Forward Declare" the structs.
-           # This tells Clang 'These exist' without triggering redefinition errors.
+           # Forward declarations to satisfy Clang's strict type checking
+           # We put these directly into the file without an extra include
            printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#include <linux/types.h>\n" > header_fix.txt
            cat header_fix.txt kernel/sched/walt/trace.h > trace.h.new
            mv trace.h.new kernel/sched/walt/trace.h
-        
-           # Also fix the MAX_CLUSTERS missing issue by pointing to the right local header
-           sed -i 's|#include "../sched.h"|#include "sched.h"|' kernel/sched/walt/trace.h || true
-
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
 
-          # 5. THE STABILIZED MARATHON BUILD
+          # 5. THE MARATHON BUILD WITH TARGETED INCLUDE
           echo "🔥 Starting the marathon build..."
           make -j1 \
              ARCH=arm64 \
@@ -127,7 +122,7 @@ jobs:
              HOSTCXX=g++ \
              LLVM=1 \
              LLVM_IAS=0 \
-             KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration -ferror-limit=1"
+             KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration -ferror-limit=1 -I$(pwd)/kernel/sched/walt"
           # 6. THE AUTO-DETECTION
           if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
           echo "❌ Build failed. Here are the last 100 lines of the log:"
