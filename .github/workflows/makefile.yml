@@ -24,7 +24,16 @@ jobs:
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
           git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
-          
+
+      - name: Rejoin Kernel Parts
+        run: |
+          # This takes Kernel.tar.gz.01, .02, etc. and merges them
+          # The '?' or '*' wildcard ensures they stay in numerical order
+          cat Kernel.tar.gz.0* > Kernel.tar.gz
+        
+          # Verify the file now exists and show its size
+          ls -lh Kernel.tar.gz
+        
       - name: Reconstruct and Prepare Source
         run: |
           # 1. List everything to see where files are (Debug)
