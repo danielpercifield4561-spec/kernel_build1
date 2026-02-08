@@ -31,12 +31,9 @@ jobs:
 
       - name: Build kernel
         run: |
-      - name: Build kernel
-        run: |
           sudo chmod -R 777 $GITHUB_WORKSPACE
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           
-          # Remove O=out for now to ensure the config lands in the main directory
           args="ARCH=arm64 \
                 ${{ env.BUILD_ARGS }} \
                 CLANG_TRIPLE=aarch64-linux-gnu- \
@@ -45,24 +42,27 @@ jobs:
           
           cd kernel-source
 
-          # 1. Generate the config
-          echo "Generating config using: vendor/${{ env.KERNEL_CONFIG }}"
-          make ${args} vendor/${{ env.KERNEL_CONFIG }}
+          # 1. Clear any old failed attempts
+          make clean && make mrproper
+
+          # 2. Try to find the file and run it directly
+          # This finds the file regardless of how many 'vendor' folders are in the way
+          CONF_PATH=$(find arch/arm64/configs -name "${{ env.KERNEL_CONFIG }}" | sed 's|arch/arm64/configs/||')
           
-          # 2. PROOF OF LIFE: Check if .config exists in the current folder
-          if [ -f ".config" ]; then
-            echo "✅ .config successfully created!"
-            head -n 10 .config
-          else
-            echo "❌ ERROR: .config NOT FOUND in $(pwd)"
-            ls -a
+          echo "Final Path Check: $CONF_PATH"
+          
+          # 3. Generate the config
+          make ${args} $CONF_PATH
+          
+          # 4. Critical check: stop here if it failed
+          if [ ! -f ".config" ]; then
+            echo "❌ STILL NO CONFIG. Checking directory structure..."
+            ls arch/arm64/configs/vendor/
             exit 1
           fi
 
-          # 3. Start the heavy lifting
+          # 5. Build
           make -j$(nproc --all) ${args}
-
-
 
       - name: Package kernel
         run: |
