@@ -79,37 +79,56 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang llvm lld
-
+  
       - name: Compile Kernel
         run: |
-          cd kernel-source
+          # 1. FIND THE BUILD ROOT
+          # We look for the top-level Makefile that contains "VERSION ="
+          # This prevents us from building in the wrong sub-folder
+          BUILD_ROOT=$(grep -l "VERSION =" */Makefile Makefile 2>/dev/null | head -n 1 | xargs dirname)
         
-          # 1. CRITICAL: Set the Architecture variables FIRST
+          if [ -z "$BUILD_ROOT" ] || [ "$BUILD_ROOT" = "." ]; then
+              echo "⚠️ Makefile is in the current directory."
+              BUILD_ROOT="."
+          else
+              echo "✅ Found Main Makefile in: $BUILD_ROOT"
+              cd "$BUILD_ROOT"
+          fi
+
+          # 2. Setup Variables (Now using absolute paths to be safe)
           export ARCH=arm64
-          # We know your toolchain is in 'aarch64-linux-android-4.9' based on logs
-          export CROSS_COMPILE=$(pwd)/../aarch64-linux-android-4.9/bin/aarch64-linux-android-
-          export PATH=$(pwd)/../clang/bin:$PATH
+          # Adjust this path if your toolchain folder name is different
+          # We use $(readlink -f ..) to get the absolute path of the parent workspace
+          WORKSPACE_ROOT=$(readlink -f ..)
+          export CROSS_COMPILE="$WORKSPACE_ROOT/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
+          export PATH="$WORKSPACE_ROOT/clang/bin:$PATH"
         
-          # 2. Find and Load the Config
+          echo "🔧 Build Root: $(pwd)"
+          echo "🔧 Toolchain: $CROSS_COMPILE"
+
+          # 3. Find and Force-Load the Config
           echo "🔍 Hunting for config..."
+          # We look inside the current build root for the config
           CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
-          
+        
           if [ -z "$CONFIG_PATH" ]; then
-             echo "❌ CRITICAL: Config file not found!"
-             exit 1
+            echo "❌ CRITICAL: Config file not found!"
+            # Fallback: Look in the original extraction folder if we moved
+            CONFIG_PATH=$(find ../kernel-source -name "gta9pwifi_eur_open_defconfig" 2>/dev/null | head -n 1)
           fi
         
-          echo "✅ Found config at: $CONFIG_PATH"
-          cp "$CONFIG_PATH" .config
-        
-          # 3. Now run the config update (This will work now that ARCH is set)
-          echo "⚙️  Locking in configuration..."
-          make olddefconfig
-
-          # 4. Create the symlink just in case internal Makefiles reference it
-          ln -s $(pwd)/../aarch64-linux-android-4.9 $(pwd)/../gcc-arm-64 2>/dev/null || true
-        
-          # 5. Build
+          if [ -n "$CONFIG_PATH" ]; then
+             echo "✅ Found config at: $CONFIG_PATH"
+             cp "$CONFIG_PATH" .config
+             echo "⚙️ Locking in configuration..."
+             make olddefconfig
+          else
+             echo "❌ Config completely missing. Listing configs:"
+             ls -R arch/arm64/configs
+             exit 1
+          fi
+ 
+          # 4. Build
           echo "🔥 Starting the compilation..."
           make -j$(nproc --all) LLVM=1 LLVM_IAS=1
 
