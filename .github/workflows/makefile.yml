@@ -52,20 +52,28 @@ jobs:
           sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
       - name: Compile Kernel
         run: |
-          # 1. Install the compiler
-          sudo apt update
-          sudo apt install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu bc bison flex
+          # 1. Force move into the source directory
+          if [ -d "kernel-source" ]; then
+            cd kernel-source
+          else
+            echo "❌ ERROR: kernel-source directory not found!"
+            ls -R
+            exit 1
+          fi
 
-          # 2. Go into your source directory (Adjust folder name if needed)
-          cd kernel-source 
-
-          # 3. Set Build Environment
+          # 2. Set necessary paths for the toolchain
+          # This tells the system exactly where your 'aarch64-linux-gnu-' is
+          export PATH=$PATH:$(pwd)/../gcc-arm-64/bin
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
 
-          # 4. Configure and Build
+          # 3. Clean and Configure
+          echo "📂 Current Directory: $(pwd)"
           make gta9pwifi_eur_open_defconfig
+
+          # 4. Build (This is where the real work happens)
           make -j$(nproc --all)
+
 
       - name: Final Package and Upload
         run: |
