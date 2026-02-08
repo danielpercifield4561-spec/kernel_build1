@@ -95,25 +95,31 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-           # 3. ISOLATED WALT MAKEFILE PATCH
-           echo "🩹 Isolating WALT build environment..."
+           # 3. INTERNAL WALT ISOLATION
+           echo "🩹 Setting up internal WALT environment..."
         
-           # 1. Patch the WALT Makefile to include its own directory only for its own files
-           # This prevents 'regmap' and other drivers from seeing the WALT trace.h
-           sed -i 's|ccflags-y += -I$(src)|ccflags-y += -I$(src) -I$(srctree)/$(src)|g' kernel/sched/walt/Makefile
+           # 1. Clean up any previous attempts
+           find . -name "trace.h.new" -delete
+        
+           # 2. Create the internal symlink so 'trace.h' is visible to its own directory
+           # This solves the './trace.h not found' without polluting other drivers
+           cd kernel/sched/walt
+           ln -sf walt_trace.h trace.h
+           cd ../../../
 
-           # 2. Forward declarations for the Trace file
-           # We also define MAX_CLUSTERS manually here as a fallback for Clang
-           printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
-           cat header_fix.txt kernel/sched/walt/trace.h > trace.h.new
-           mv trace.h.new kernel/sched/walt/trace.h
+           # 3. Forward declarations and MAX_CLUSTERS fix
+           # This keeps Clang's type-checker happy
+          printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
+          cat header_fix.txt kernel/sched/walt/walt_trace.h > walt_trace.h.new
+          mv walt_trace.h.new kernel/sched/walt/walt_trace.h
+          rm header_fix.txt
+      
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
 
           # 5. THE CLEAN MARATHON BUILD
           echo "🔥 Starting the isolated build..."
-          # Note: We REMOVED the -I path from KCFLAGS here to prevent driver pollution
           make -j1 \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
