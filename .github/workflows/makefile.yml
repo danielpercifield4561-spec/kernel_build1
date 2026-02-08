@@ -31,9 +31,15 @@ jobs:
 
       - name: Build kernel
         run: |
+          # 1. Fix Permissions
           sudo chmod -R 777 $GITHUB_WORKSPACE
-          git clone "https://github.com/danielpercifield4561-spec/defconfig/edit/main/gta9pwifi_eur_open_defconfig"
-              menuconfig
+          
+          # 2. Setup Toolchain Paths
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+          
+          # 3. Define Build Arguments (Include O=out here)
+          args="ARCH=arm64 \
+                O=out \
                 ${{ env.BUILD_ARGS }} \
                 CLANG_TRIPLE=aarch64-linux-gnu- \
                 CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
@@ -41,8 +47,12 @@ jobs:
           
           cd kernel-source
           mkdir -p out
-              make ${args} ${{ env.KERNEL_CONFIG }}
+
+          # 4. Generate the config using the VENDOR path
+          # Samsung Android 14 stores it in vendor/
+          make ${args} vendor/${{ env.KERNEL_CONFIG }}
           
+          # 5. Compile the kernel
           make -j$(nproc --all) ${args}
 
       - name: Package kernel
