@@ -55,20 +55,23 @@ jobs:
           
           # Install the specific versions needed by older Clang
           sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
+    
       - name: Compile Kernel
         run: |
+          # 1. Enter the source folder
           cd kernel-source
         
-          # This fix tells the WALT scheduler where to find its trace headers
+          # 2. Fix the WALT scheduler trace error (as seen in your logs)
           sed -i 's|CFLAGS_trace.o := -I$(src)|CFLAGS_trace.o := -I$(src) -I$(srctree)/$(src)|g' kernel/sched/walt/Makefile
-          
-          export ARCH=arm64
-          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-gnu-
         
-          # Re-run your config and build
+          # 3. Setup Toolchain Path (Double-check your folder name!)
+          # We use $(pwd)/.. because the toolchain is usually one level above kernel-source
+          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-gnu-
+          export ARCH=arm64
+        
+          # 4. Run the config and build
           make vendor/gta9pwifi_eur_open_defconfig
           make -j$(nproc --all) LLVM=1 LLVM_IAS=1
-
 
       - name: Final Package and Upload
         run: |
@@ -94,6 +97,8 @@ jobs:
 
            #3. Final check 
            li -lh out/
+
+
       - name: Upload Flashable Zip
         uses: actions/upload-artifact@v4
         with:
