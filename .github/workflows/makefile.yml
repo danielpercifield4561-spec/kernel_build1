@@ -29,22 +29,39 @@ jobs:
         run: |
           git clone --depth=1 ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} kernel-source
 
-      - name: Fix Permissions
-        run: |
-          sudo chmod -R 722 $GITHUB_WORKSPACE
-     
       - name: List all available configs
         run: |
           find kernel-source/arch/arm64/configs -name "*defconfig*"
       
       - name: Build kernel
         run: |
+          # 1. Permission Fix (Run this first)
+          sudo chmod -R 777 $GITHUB_WORKSPACE
+          
+          # 2. Setup paths
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          args="ARCH=arm64 O=out ${{ env.BUILD_ARGS }} CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
+          args="ARCH=arm64 \
+                O=out \
+                ${{ env.BUILD_ARGS }} \
+                CLANG_TRIPLE=aarch64-linux-gnu- \
+                CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
+                CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
+          
           cd kernel-source
           mkdir -p out
-          # This will now correctly find 'vendor/gta9pwifi_eur_open_defconfig'
+
+          # 3. THE KEY STEP: Generate the .config INSIDE the 'out' folder
+          # We use the 'args' which include O=out so it lands in the right spot
           make ${args} ${{ env.KERNEL_CONFIG }}
+          
+          # 4. Verify the file exists before starting (This stops the "Same place" failure)
+          if [ ! -f "out/.config" ]; then
+            echo "ERROR: .config was not generated in the out folder!"
+            ls -a out/
+            exit 1
+          fi
+
+          # 5. Compile
           make -j$(nproc --all) ${args}
 
       - name: Package kernel
