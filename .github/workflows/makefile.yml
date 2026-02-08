@@ -25,31 +25,26 @@ jobs:
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
           git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
-      - name: Reconstruct and Extract Source
+      - name: Reconstruct and Prepare Source
         run: |
-          # 1. Install p7zip just in case (though usually present)
-          sudo apt-get update && sudo apt-get install -y p7zip-full
-
-          # 2. Extract using 7z (pointing only to the .001 file)
-          # 7z will automatically find .002, .003, etc., and join them
+          # 1. Extract the main source
           mkdir -p kernel-source
-          echo "📦 Extracting multi-part archive with 7z..."
-          7z x Kernel.tar.gz.001 -o./kernel-source/ -y
-
-          # 3. Check if we need to unpack a secondary layer
-          # If ZArchiver put the .tar.gz inside the .001, we unpack it now
-          cd kernel-source
-          if [ -f "Kernel.tar.gz" ]; then
-            tar -xf Kernel.tar.gz --strip-components=1 || tar -xf Kernel.tar.gz
-          fi
-
-          # 4. Final verification
-          echo "📂 Checking for Makefile:"
-          ls -l Makefile || ls -R | grep Makefile
-
+          # Using 7z because your log shows it's a zip archive with a .tar.gz name
+          7z x Kernel.tar.gz -okernel-source/
+        
+          # 2. Find and Move the config
+          # We look for the file first to make sure we don't 'stat' a ghost
+          find . -name "gta9pwifi_eur_open_defconfig"
+        
+          # Create the destination folder inside the source
           mkdir -p kernel-source/arch/arm64/configs/vendor/
-          cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
-          echo "✅ Config placed in arch/arm64/configs/vendor/"
+        
+          # Copy the file from the root (where GitHub puts it) into the source
+          cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/ || \
+          cp kernel-source/gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
+        
+          echo "✅ Config placement verified."
+
 
       - name: Install Legacy Dependencies
         run: |
