@@ -95,13 +95,22 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-                  # 3. THE CLEAN PATH FIX
-          echo "🩹 Setting up header search paths..."
-          # Clean up any previous symlinks or messy patches
-          rm -f trace.h walt_trace.h
+          # 3. THE DEFINITIVE WALT & TRACE FIX
+          echo "🩹 Fixing header definitions for Clang..."
         
-          # Create a clean symlink for the trace system
+          # Create the symlink so the file is found
           ln -sf kernel/sched/walt/trace.h trace.h
+          ln -sf kernel/sched/walt/walt_trace.h walt_trace.h
+
+          # Inject missing headers into the trace file so Clang knows what 'struct rq' is
+          # We add these to the top of the file
+          sed -i '1i #include <linux/sched.h>\n#include <linux/sched/clock.h>' kernel/sched/walt/trace.h
+        
+           # Patch the absolute path into the header itself (using | to avoid path slashes)
+          find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
+        
+          # Fix the "Incomplete Definition" errors by adding the scheduler header
+          sed -i 's|#define TRACE_INCLUDE_FILE trace|#include <linux/sched.h>\n#define TRACE_INCLUDE_FILE trace|' kernel/sched/walt/trace.h
 
 
           # 4. Load Config
