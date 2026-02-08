@@ -62,32 +62,27 @@ jobs:
         run: |
           cd kernel-source
         
-          # 1. Debug: Let's see what is actually in the workspace
-          echo "📂 Current directory: $(pwd)"
-          echo "📂 Parent directory contents:"
-          ls -F ..
-
-          # 2. Look for ANY aarch64-linux-gnu-gcc in the whole workspace
-          GCC_PATH=$(find /home/runner/work/ -name "aarch64-linux-gnu-gcc" | head -n 1)
-        
-          if [ -z "$GCC_PATH" ]; then
-           echo "❌ ERROR: The compiler 'aarch64-linux-gnu-gcc' was not found!"
-           echo "Check your 'Pull toolchain' step to ensure it extracted successfully."
-           exit 1
-          fi
-
-          # 3. Set variables using the found path
+          # 1. Set the ARCH
           export ARCH=arm64
-          export CROSS_COMPILE="${GCC_PATH%gcc}"
-          echo "✅ Found Toolchain at: $CROSS_COMPILE"
+        
+          # 2. Set the path to the toolchain you actually have
+          # We point to the 'bin' folder inside the android-4.9 directory
+          TOOLCHAIN_PATH=$(pwd)/../aarch64-linux-android-4.9/bin
+          export CROSS_COMPILE=$TOOLCHAIN_PATH/aarch64-linux-android-
+        
+          # 3. Add Clang to the path since you have a 'clang' folder
+          export PATH=$(pwd)/../clang/bin:$PATH
+        
+          echo "✅ Using Toolchain: $CROSS_COMPILE"
         
           # 4. Run the configuration
           echo "🚀 Configuring..."
           make vendor/gta9pwifi_eur_open_defconfig
         
-          # 5. Build
+          # 5. Build (Using the LLVM arguments from your config.env)
           echo "🛠️ Building..."
-          make -j$(nproc --all) LLVM=1 LLVM_IAS=1
+          make -j$(nproc --all) CC=clang CLANG_TRIPLE=aarch64-linux-gnu- 
+
 
 
       - name: Final Package and Upload
