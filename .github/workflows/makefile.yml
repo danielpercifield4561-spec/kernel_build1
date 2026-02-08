@@ -52,3 +52,12 @@ jobs:
         with:
           name: AnyKernel3_kernel
           path: AnyKernel3/*
+      
+      - name: Upload Finished Kernel
+        uses: actions/upload-artifact@v4
+        with:
+          name: SM-X210-Kernel-Build
+          path: |
+            kernel-source/arch/arm64/boot/Image.gz
+            kernel-source/arch/arm64/boot/dtbo.img
+            kernel-source/arch/arm64/boot/Image
