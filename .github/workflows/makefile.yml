@@ -37,6 +37,22 @@ jobs:
           
           # Install the specific versions needed by older Clang
           sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
+      - name: Compile Kernel
+        run: |
+          # 1. Install the compiler
+          sudo apt update
+          sudo apt install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu bc bison flex
+
+          # 2. Go into your source directory (Adjust folder name if needed)
+          cd kernel-source 
+
+          # 3. Set Build Environment
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+
+          # 4. Configure and Build
+          make gta9pwifi_eur_open_defconfig
+          make -j$(nproc --all)
 
       - name: Final Package and Upload
         run: |
