@@ -35,10 +35,13 @@ jobs:
       
       - name: Build kernel
         run: |
-          # 1. Permission Fix (Run this first)
           sudo chmod -R 777 $GITHUB_WORKSPACE
-          
-          # 2. Setup paths
+          if [ ! -f "out/.config" ]; then
+            echo "ERROR: .config was not generated in the out folder!"
+            ls -a out/
+            exit 1
+          fi
+          make config
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           args="ARCH=arm64 \
                 O=out \
@@ -49,19 +52,8 @@ jobs:
           
           cd kernel-source
           mkdir -p out
-
-          # 3. THE KEY STEP: Generate the .config INSIDE the 'out' folder
-          # We use the 'args' which include O=out so it lands in the right spot
-          make ${args} ${{ env.KERNEL_CONFIG }}
+              make ${args} ${{ env.KERNEL_CONFIG }}
           
-          # 4. Verify the file exists before starting (This stops the "Same place" failure)
-          if [ ! -f "out/.config" ]; then
-            echo "ERROR: .config was not generated in the out folder!"
-            ls -a out/
-            exit 1
-          fi
-
-          # 5. Compile
           make -j$(nproc --all) ${args}
 
       - name: Package kernel
