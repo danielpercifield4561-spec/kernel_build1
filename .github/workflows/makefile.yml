@@ -26,24 +26,37 @@ jobs:
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
           git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
-      - name: Reconstruct and Extract Source
-        run: |
-          # 1. Glue the parts
-          cat part_* > Platform.tar.gz
+       - name: Reconstruct and Extract Source
+         run: |
+          # 1. DEBUG: List all files in the workspace to find the parts
+          echo "🔍 Searching for part files..."
+          find . -maxdepth 3 -not -path '*/.*'
         
-          # 2. Extract into a temporary spot
+          # 2. Search for your parts regardless of where they are
+          PART_FILES=$(find . -iname "part_*" | sort)
+        
+          if [ -z "$PART_FILES" ]; then
+          echo "❌ ERROR: No files starting with 'part_' were found!"
+          exit 1
+          fi
+        
+          # 3. Join the parts found into one file
+          cat $PART_FILES > Platform.tar.gz
+          echo "✅ Reconstructed Platform.tar.gz"
+        
+          # 4. Extract into a temporary spot
           mkdir -p temp_extract
           tar -xf Platform.tar.gz -C temp_extract
         
-          # 3. Find where 'arch' actually is and move everything to 'kernel-source'
-          # This handles cases where the zip has an extra top-level folder
+          # 5. Flatten the folder (Move 'arch' to top level)
           mkdir -p kernel-source
           SUBFOLDER=$(find temp_extract -name "arch" -type d -printf '%h\n' | head -n 1)
           mv $SUBFOLDER/* kernel-source/
         
-          # 4. Final verification - These MUST appear in your logs
-          echo "✅ Contents of kernel-source:"
+          # 6. Final verification
+          echo "📂 Ready to build. Source contents:"
           ls -F kernel-source/
+
 
 
       - name: Install Legacy Dependencies
