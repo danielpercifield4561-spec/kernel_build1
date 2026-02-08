@@ -31,16 +31,21 @@ jobs:
           
       - name: Build kernel
         run: |
-          export KBUILD_BUILD_USER="DLP"
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+          # Set up the build arguments
           args="ARCH=arm64 \
-                O=../out \
+                O=out \
                 ${{ env.BUILD_ARGS }} \
                 CLANG_TRIPLE=aarch64-linux-gnu- \
                 CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
                 CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
+          
           cd kernel-source
+          # 1. Force create the output directory
+          mkdir -p out
+          # 2. Generate the .config file using your specific device config
           make ${args} ${{ env.KERNEL_CONFIG }}
+          # 3. Compile the actual kernel using all CPU cores
           make -j$(nproc --all) ${args}
 
       - name: Package kernel
