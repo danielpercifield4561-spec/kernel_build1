@@ -95,25 +95,26 @@ jobs:
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
 
-           # 3. ISOLATED WALT PATCHING
+           # 3. ISOLATED WALT PATCHING (The Safe Way)
            echo "🩹 Fixing WALT paths and headers..."
-           # Remove any previous symlinks to start fresh
            rm -f trace.h walt_trace.h
         
-           # Patch the trace include path for the stringify macro
+           # Patch the trace include path
            find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
         
-           # Inject the necessary headers with the correct relative path for 'sched.h'
-           # This fixes the 'struct rq' and 'MAX_CLUSTERS' errors
-           sed -i '1i #include <linux/sched.h>\n#include <linux/sched/clock.h>\n#include "../sched.h"' kernel/sched/walt/trace.h
+           # Inject headers using printf (Safest way to avoid quote errors)
+          # We create a temporary file with the new headers and merge it
+          printf "#include <linux/sched.h>\n#include <linux/sched/clock.h>\n#include \"../sched.h\"\n" > header_fix.txt
+          cat header_fix.txt kernel/sched/walt/trace.h > trace.h.new
+          mv trace.h.new kernel/sched/walt/trace.h
+          rm header_fix.txt
 
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
 
-          # 5. THE STABILIZED SINGLE-CORE BUILD
+          # 5. THE STABILIZED MARATHON BUILD
           echo "🔥 Starting the marathon build..."
-          # Using -j1 is the only way to stop the "Broken Pipe" IO failures on this runner
           make -j1 \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
@@ -124,8 +125,7 @@ jobs:
              HOSTCXX=g++ \
              LLVM=1 \
              LLVM_IAS=0 \
-             KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration -ferror-limit=1""
-
+             KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration -ferror-limit=1"
           # 6. THE AUTO-DETECTION
           if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
           echo "❌ Build failed. Here are the last 100 lines of the log:"
