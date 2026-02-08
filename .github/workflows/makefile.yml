@@ -26,8 +26,8 @@ jobs:
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
           git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
-       - name: Reconstruct and Extract Source
-         run: |
+      - name: Reconstruct and Extract Source
+        run: |
           # 1. DEBUG: List all files in the workspace to find the parts
           echo "🔍 Searching for part files..."
           find . -maxdepth 3 -not -path '*/.*'
