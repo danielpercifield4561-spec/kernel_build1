@@ -61,19 +61,29 @@ jobs:
       - name: Compile Kernel
         run: |
           cd kernel-source
-          export ARCH=arm64
-          export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-gnu-
         
-          # 1. Start the config using the VENDOR path found in your photo
-          # This is what matches your config.env settings
+          # 1. Automatically find where the GCC toolchain is
+          # This looks for the folder containing 'aarch64-linux-gnu-gcc'
+          GCC_BIN_PATH=$(find .. -name "aarch64-linux-gnu-gcc" -print -quit | xargs dirname)
+        
+          if [ -z "$GCC_BIN_PATH" ]; then
+            echo "❌ ERROR: Toolchain not found! Check your 'Pull toolchain' step."
+            exit 1
+          fi
+        
+          # 2. Set the variables using the absolute path we just found
+          export ARCH=arm64
+          export CROSS_COMPILE="$GCC_BIN_PATH/aarch64-linux-gnu-"
+        
+          echo "✅ Toolchain found at: $GCC_BIN_PATH"
+        
+          # 3. Run the configuration
           echo "🚀 Configuring with vendor path..."
           make vendor/gta9pwifi_eur_open_defconfig
         
-          # 2. Build with LLVM if your config.env requires it
-          echo "🛠️ Building..."
+          # 4. Build
+          echo "🛠️ Starting Compilation..."
           make -j$(nproc --all) LLVM=1 LLVM_IAS=1
-
-
 
       - name: Final Package and Upload
         run: |
