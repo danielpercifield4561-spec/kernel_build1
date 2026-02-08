@@ -27,23 +27,31 @@ jobs:
           
       - name: Reconstruct and Prepare Source
         run: |
-          # 1. Extract the main source
+          # 1. List everything to see where files are (Debug)
+          ls -R
+        
+          # 2. Find the actual path of Kernel.tar.gz
+          KERNEL_PATH=$(find . -name "Kernel.tar.gz" | head -n 1)
+          CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+
+          if [ -z "$KERNEL_PATH" ]; then
+           echo "❌ ERROR: Kernel.tar.gz not found in the repository!"
+           exit 1
+           fi
+
+          # 3. Extract using the found path
           mkdir -p kernel-source
-          # Using 7z because your log shows it's a zip archive with a .tar.gz name
-          7z x Kernel.tar.gz -okernel-source/
+          7z x "$KERNEL_PATH" -okernel-source/
         
-          # 2. Find and Move the config
-          # We look for the file first to make sure we don't 'stat' a ghost
-          find . -name "gta9pwifi_eur_open_defconfig"
-        
-          # Create the destination folder inside the source
+          # 4. Place the config into the new source tree
           mkdir -p kernel-source/arch/arm64/configs/vendor/
-        
-          # Copy the file from the root (where GitHub puts it) into the source
-          cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/ || \
-          cp kernel-source/gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
-        
-          echo "✅ Config placement verified."
+          if [ -n "$CONFIG_PATH" ]; then
+          cp "$CONFIG_PATH" kernel-source/arch/arm64/configs/vendor/
+          echo "✅ Config placed successfully."
+          else
+          echo "⚠️ Warning: gta9pwifi_eur_open_defconfig not found, skipping move."
+           fi
+
 
 
       - name: Install Legacy Dependencies
