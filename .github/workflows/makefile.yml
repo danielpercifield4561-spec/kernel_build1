@@ -112,6 +112,24 @@ jobs:
           # 4. LOAD CONFIG
           CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
             cp "$CONFIG_PATH" .config
+        
+           # 4. FIXES & PATCHES
+          echo "🩹 Applying WALT fix..."
+          find kernel/sched/walt -name "Makefile" -exec sed -i 's|$(src)/|$(srctree)/$(src)/|g' {} +
+        
+          # 5. START THE BUILD
+          echo "🔥 Starting the compilation..."
+          make -j$(nproc --all) \
+             ARCH=arm64 \
+             CROSS_COMPILE="$CROSS_COMPILE" \
+             CC="$CLANG_PATH" \
+             CLANG_TRIPLE=aarch64-linux-gnu- \
+             LD="$LD_PATH" \
+             HOSTCC=gcc \
+             HOSTCXX=g++ \
+             LLVM=1 \
+             LLVM_IAS=1 \
+             KCFLAGS="-Wno-error"
 
           # 5. RUN CONFIG & BUILD
           echo "⚙️ Locking in configuration..."
@@ -119,21 +137,7 @@ jobs:
           make ARCH=arm64 CROSS_COMPILE="$CROSS_BIN" \
              HOSTCC=gcc HOSTCXX=g++ \
              olddefconfig
-
-          echo "🔥 Starting the compilation..."
-          make -j$(nproc --all) \
-             ARCH=arm64 \
-             CROSS_COMPILE="$CROSS_BIN" \
-             CC="$CLANG_BIN" \
-             CLANG_TRIPLE=aarch64-linux-gnu- \
-             LD="${CROSS_BIN}ld" \
-             HOSTCC=gcc \
-             HOSTCXX=g++ \
-             LLVM=1 \
-             LLVM_IAS=1
-
-
-
+             
       - name: Final Package and Upload
         run: |
            # 1. Setup AnyKernel3
