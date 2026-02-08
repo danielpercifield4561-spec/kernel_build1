@@ -84,31 +84,34 @@ jobs:
         run: |
           cd kernel-source
         
-          # 1. Apply the WALT scheduler fix ONLY if the file exists
-          if [ -f "kernel/sched/walt/Makefile" ]; then
-            echo "✅ Patching WALT Makefile..."
-            sed -i 's|CFLAGS_trace.o := -I$(src)|CFLAGS_trace.o := -I$(src) -I$(srctree)/$(src)|g' kernel/sched/walt/Makefile
-          else
-            echo "⚠️ WALT Makefile not found, skipping patch."
+          # 1. FIX: Find the config file automatically, no matter where it is
+          echo "🔍 Hunting for the config file..."
+          CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+        
+          if [ -z "$CONFIG_PATH" ]; then
+            echo "❌ CRITICAL: Config file not found in source!"
+            # List configs so we can see what IS there in the logs
+            ls -R arch/arm64/configs
+            exit 1
           fi
+        
+          echo "✅ Found config at: $CONFIG_PATH"
+        
+          # 2. FORCE LOAD: Copy it directly to .config to bypass "No rule" errors
+          cp "$CONFIG_PATH" .config
+          # This command updates the .config without asking questions
+          make olddefconfig
 
-          # 2. Fix the toolchain folder name (Symlink)
-          # Your workspace has 'aarch64-linux-android-4.9', but script wants 'gcc-arm-64'
+          # 3. Toolchain Safety Net (from previous fix)
           ln -s $(pwd)/../aarch64-linux-android-4.9 $(pwd)/../gcc-arm-64 2>/dev/null || true
         
-          # 3. Set compiler variables
+          # 4. Set Variables
           export ARCH=arm64
-          # Note: using 'android-' prefix found in your previous logs
           export CROSS_COMPILE=$(pwd)/../gcc-arm-64/bin/aarch64-linux-android-
           export PATH=$(pwd)/../clang/bin:$PATH
         
-          # 4. Run the configuration
-          echo "🚀 Configuring with vendor path..."
-          make vendor/gta9pwifi_eur_open_defconfig
-        
-          # 5. Start the build
-          echo "🛠️ Building..."
-          make -j$(nproc --all) LLVM=1 LLVM_IAS=1
+          # 5. Build
+          echo "🛠️ Starting Compilation..."
           make -j$(nproc --all) LLVM=1 LLVM_IAS=1
 
       - name: Final Package and Upload
