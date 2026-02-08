@@ -29,14 +29,12 @@ jobs:
         run: |
           git clone --depth=1 ${{ env.KERNEL_SOURCE }} -b ${{ env.KERNEL_SOURCE_BRANCH }} kernel-source
 
-      - name: Build kernel
+            - name: Build kernel
         run: |
-          # Give full permissions to the toolchains and source
           sudo chmod -R 777 $GITHUB_WORKSPACE
-          
           export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
           
-          # We store the flags in a variable so we don't miss one
+          # Setup build arguments
           args="ARCH=arm64 \
                 O=out \
                 ${{ env.BUILD_ARGS }} \
@@ -46,13 +44,31 @@ jobs:
           
           cd kernel-source
           mkdir -p out
+
+          # 1. SMART SEARCH: Find where the defconfig actually lives
+          # This finds the file and strips the 'arch/arm64/configs/' part so 'make' can use it
+          REAL_CONFIG=$(find arch/arm64/configs -name "${{ env.KERNEL_CONFIG }}" | sed 's|arch/arm64/configs/||')
           
-          # STEP 1: Generate the config using the VENDOR path
-          # Notice we use ${args} here so it knows to put the .config in 'out/'
-          make ${args} vendor/${{ env.KERNEL_CONFIG }}
+          if [ -z "$REAL_CONFIG" ]; then
+            echo "CRITICAL ERROR: Could not find ${{ env.KERNEL_CONFIG }} anywhere in arch/arm64/configs!"
+            ls -R arch/arm64/configs/
+            exit 1
+          fi
           
-          # STEP 2: Compile the actual kernel
+          echo "Found config at: $REAL_CONFIG"
+
+          # 2. GENERATE CONFIG: Using the discovered path
+          make ${args} $REAL_CONFIG
+          
+          # 3. VERIFY: If out/.config doesn't exist now, we stop before the big Error 2
+          if [ ! -f "out/.config" ]; then
+            echo "ERROR: .config generation failed!"
+            exit 1
+          fi
+
+          # 4. START BUILD
           make -j$(nproc --all) ${args}
+
 
       - name: Package kernel
         run: |
