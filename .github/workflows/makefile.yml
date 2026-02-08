@@ -36,32 +36,26 @@ jobs:
         
       - name: Reconstruct and Prepare Source
         run: |
-          # 1. List everything to see where files are (Debug)
-          ls -R
+          # 1. Join the .01, .02 pieces into one file
+          # Using 0* handles .01, .02... through .09 correctly
+          cat Kernel.tar.gz.0* > Kernel.tar.gz
         
-          # 2. Find the actual path of Kernel.tar.gz
-          KERNEL_PATH=$(find . -name "Kernel.tar.gz" | head -n 1)
-          CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
-
-          if [ -z "$KERNEL_PATH" ]; then
-           echo "❌ ERROR: Kernel.tar.gz not found in the repository!"
+          # 2. Check if the join worked
+          if [ ! -f "Kernel.tar.gz" ]; then
+            echo "❌ ERROR: Kernel.tar.gz still missing after join attempt!"
+            ls -R
            exit 1
-           fi
+          fi
+          echo "✅ Kernel.tar.gz rejoined. Size: $(du -sh Kernel.tar.gz)"
 
-          # 3. Extract using the found path
+          # 3. Extract it
           mkdir -p kernel-source
-          7z x "$KERNEL_PATH" -okernel-source/
+          7z x Kernel.tar.gz -okernel-source/
         
-          # 4. Place the config into the new source tree
+          # 4. Place your config file (Now that source folder exists)
           mkdir -p kernel-source/arch/arm64/configs/vendor/
-          if [ -n "$CONFIG_PATH" ]; then
-          cp "$CONFIG_PATH" kernel-source/arch/arm64/configs/vendor/
-          echo "✅ Config placed successfully."
-          else
-          echo "⚠️ Warning: gta9pwifi_eur_open_defconfig not found, skipping move."
-           fi
-
-
+          cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
+          echo "✅ Config placed in vendor folder."
 
       - name: Install Legacy Dependencies
         run: |
