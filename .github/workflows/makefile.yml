@@ -30,18 +30,19 @@ jobs:
         run: |
           # 1. Join the parts
           cat Platform.tar.gz.part-a* > Platform.tar.gz
-          
+        
           # 2. Extract
           mkdir -p kernel-source
           tar -xf Platform.tar.gz -C kernel-source --strip-components=1
         
-          # 3. FORCE MOVE the defconfig from your repo into the kernel tree
-          # This is the 'missing link' that's causing your error
+          # 3. MOVE the config from your repo into the correct kernel folder
+          # This is the step that fixes the 'No rule to make target' error
           mkdir -p kernel-source/arch/arm64/configs/
           cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/
         
-          # 4. Verify it's in the right spot
+          # 4. Final check: ensure the file is where it belongs
           ls kernel-source/arch/arm64/configs/gta9pwifi_eur_open_defconfig
+
 
 
       - name: Install Legacy Dependencies
