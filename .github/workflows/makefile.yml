@@ -14,35 +14,36 @@ jobs:
       - name: 1. Initialization
         uses: actions/checkout@v4
 
-      - name: 2. Environment Setup
+      - name: 2. Environment Setup & Early Extraction
         run: |
           # a. Pull Toolchains
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
           git clone --depth=1 https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
-          # b. Dependencies
-          sudo add-apt-repository 'deb http://azure.archive.ubuntu.com/ubuntu/ focal main universe'
-          sudo apt-get update
-          sudo apt-get install -y libtinfo5 libncurses5 libssl-dev 7zip
-
-      - name: 3. Brute Force Extraction & Search
-        run: |
-          # 1. Clear and Extract
+          # b. The Early Extract (Putting it aside for Step 3)
           [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.0* > Kernel.tar.gz
           mkdir -p kernel-source
-          
-          # Force extract everything into the folder
           7z x Kernel.tar.gz -okernel-source/ -y > /dev/null
           
-          # 2. 🔦 The "Ultra-Deep" Search
-          # This looks for the Makefile anywhere, regardless of folder depth
-          echo "🔎 Scanning every inch of the runner..."
-          REAL_PATH=$(find . -name "Makefile" | grep -v "scripts" | head -n 1)
-          
-          if [ -z "$REAL_PATH" ]; then
-            echo "❌ NO MAKEFILE FOUND. Listing all files found:"
-            find . -maxdepth 4
+          # c. Immediate Flattening
+          REAL_SRC=$(find kernel-source/ -name "Makefile" -print -quit | xargs dirname)
+          if [ "$REAL_SRC" != "kernel-source" ] && [ -n "$REAL_SRC" ]; then
+            echo "Moving guts from $REAL_SRC to kernel-source root..."
+            mv "$REAL_SRC"/* kernel-source/ 2>/dev/null || true
+          fi
+
+      - name: 3. Visibility Check & Permission Grant
+        run: |
+          cd kernel-source
+          echo "📍 Current Location: $(pwd)"
+          if [ -d "arch" ]; then
+            echo "✅ WOWZA! Arch folder found and visible."
+            chmod -R 777 . # Give the 'wrists' full control
+            ls -F
+          else
+            echo "❌ Still hidden. Listing Step 2 output:"
+            ls -R .. | head -n 50
             exit 1
           fi
 
@@ -57,7 +58,6 @@ jobs:
           
           echo "✅ Visibility Check (Should see arch/):"
           ls -F
-
 
       - name: 4. Surgical Code Patching
         run: |
