@@ -26,36 +26,40 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libtinfo5 libncurses5 libssl-dev 7zip
 
-      - name: 3. Nuclear Extraction & Deep Mapping
+      - name: 3. Total Visibility & Root Leveling
         run: |
-          # 1. Join split files
+          # 1. Join & Extract
           [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.0* > Kernel.tar.gz
           mkdir -p kernel-source
-
-          # 2. Force Extraction (Extract everything, ignore errors)
-          echo "🔓 Extracting all layers..."
           7z x Kernel.tar.gz -okernel-source/ -y > /dev/null
-          
+
           cd kernel-source
 
-          # 3. 🗺️ Deep Scan: Find the 'arch' folder anywhere
-          ARCH_PATH=$(find . -name "arch" -type d -print -quit)
+          # 2. 🔍 The 'Deep Find' Strategy
+          # We look for the 'Makefile' because it's the heart of the source
+          MAKE_PATH=$(find . -maxdepth 4 -name "Makefile" -print -quit)
           
-          if [ -n "$ARCH_PATH" ]; then
-            echo "📍 Found 'arch' at: $ARCH_PATH"
-            # Get the parent directory of 'arch'
-            SOURCE_ROOT=$(dirname "$ARCH_PATH")
+          if [ -n "$MAKE_PATH" ]; then
+            SOURCE_ROOT=$(dirname "$MAKE_PATH")
+            echo "📍 Found Source Heart at: $SOURCE_ROOT"
             
+            # If it's not in the current directory, move everything UP
             if [ "$SOURCE_ROOT" != "." ]; then
-              echo "📂 Flattening: Moving files from $SOURCE_ROOT to $(pwd)"
+              echo "📂 Leveling: Moving all files from $SOURCE_ROOT to $(pwd)"
               mv "$SOURCE_ROOT"/* . 2>/dev/null || true
+              mv "$SOURCE_ROOT"/.* . 2>/dev/null || true # Get hidden files too
             fi
           else
-            echo "❌ ERROR: 'arch' folder not found anywhere in the archive!"
-            echo "📂 Here is what WAS found:"
+            echo "❌ CRITICAL: No Makefile or arch folder found!"
+            echo "Listing all directories found for debugging:"
             find . -maxdepth 3 -type d
             exit 1
           fi
+
+          # 3. Final Verification
+          echo "✅ Visibility Check:"
+          ls -F
+
 
           # 4. Final Confirmation
           echo "✅ Root Contents:"
