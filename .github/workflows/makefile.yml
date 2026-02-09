@@ -140,3 +140,22 @@ jobs:
                LD="$LD_PATH" \
                LLVM=1 \
                KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration"
+                     
+      - name: 🤖 AI Debugger Hook
+        if: failure()
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # Capture the last bit of the log
+          echo "Sending logs to Gemini for analysis..."
+          LOG_DATA=$(tail -n 50 build.log) 
+          
+          # This curl command sends the log to me
+          curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$GEMINI_API_KEY" \
+          -H 'Content-Type: application/json' \
+          -d "{
+            \"contents\": [{
+              \"parts\":[{\"text\": \"The kernel build failed with this log: $LOG_DATA. What is the exact fix?\"}]
+            }]
+          }" | jq '.candidates[0].content.parts[0].text'
+
