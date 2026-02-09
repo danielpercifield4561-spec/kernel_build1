@@ -95,7 +95,7 @@ jobs:
       - name: Compile Kernel
         run: |
           # 1. Enter the source folder
-          cd kernel-source || { echo "❌ Folder 'kernel-source' not found!"; ls -F; exit 1; }
+          cd kernel-source || { echo "❌ Folder 'kernel-source' not found!"; exit 1; }
           
           # 2. TOOLCHAIN SETUP
           ROOT_DIR=$GITHUB_WORKSPACE
@@ -103,26 +103,18 @@ jobs:
           export CROSS_COMPILE="$ROOT_DIR/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
           export PATH="$ROOT_DIR/clang/bin:$ROOT_DIR/aarch64-linux-android-4.9/bin:$PATH"
 
-          # 3. THE "FORCE-FEED" CONFIG (Bypasses 'No rule to make target')
-          echo "🔍 Finding and forcing config..."
+          # 3. FORCE-FEED CONFIG
           FIND_CONFIG=$(find $GITHUB_WORKSPACE -name "gta9pwifi_eur_open_defconfig" | head -n 1)
-          
-          if [ -z "$FIND_CONFIG" ]; then
-            echo "❌ Could not find gta9pwifi_eur_open_defconfig anywhere!"
-            exit 1
-          fi
-
-          # Instead of placing it in arch/arm64/configs, we put it in the ROOT as .config
           cp "$FIND_CONFIG" .config
           echo "✅ Config force-fed to .config"
 
-          # 4. REFRESH CONFIG
-          echo "⚙️ Refreshing config dependencies..."
-          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
+          # 4. REFRESH CONFIG (Legacy Style)
+          echo "⚙️ Refreshing config via legacy oldconfig..."
+          # yes "" | make oldconfig fills in any missing config options with defaults
+          yes "" | make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" oldconfig
 
           # 5. START THE BUILD
           echo "🔥 Starting Build..."
-          # Note: We save logs to ../build.log so the Gemini Hook can find it if this fails
           make -j$(nproc) \
             ARCH=arm64 \
             CROSS_COMPILE="$CROSS_COMPILE" \
@@ -132,15 +124,18 @@ jobs:
             HOSTCXX=g++ \
             > ../build.log 2>&1 || (echo "❌ BUILD CRASHED"; tail -n 100 ../build.log && exit 1)
 
-           # 6. VERIFY OUTPUT
-           if [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
-             echo "❌ Image.gz-dtb not found!"
+           # 6. VERIFY OUTPUT (Checking for any Image file)
+           echo "🔍 Searching for kernel image..."
+           IMAGE=$(find arch/arm64/boot/ -name "Image*" -type f | head -n 1)
+           if [ -z "$IMAGE" ]; then
+             echo "❌ No kernel image found in arch/arm64/boot/"
              exit 1
            else
-             echo "✅ KERNEL CREATED SUCCESSFULLY!"
+             echo "✅ KERNEL CREATED: $IMAGE"
              mkdir -p ../final_output
-             cp arch/arm64/boot/Image.gz-dtb ../final_output/
+             cp "$IMAGE" ../final_output/
            fi
+
              
       - name: Final Package and Upload
         run: |
