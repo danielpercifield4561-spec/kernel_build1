@@ -14,10 +14,10 @@ jobs:
       - name: 1. File Integrity Check
         run: |
           echo "🛡️ Verifying File Fingerprints..."
-          md5sum Kernel.tar.gz.* || echo "⚠️ Files not found yet"
+          md5sum Kernel.zip.* || echo "⚠️ Files not found yet"
           
           # Check if the parts are actually the same size
-          ls -lh Kernel.tar.gz.*
+          ls -lh Kernel.zip.*
 
 
       - name: 2. The Quarterback (Setup & Mapping)
@@ -28,7 +28,7 @@ jobs:
           git clone --depth=1 https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
           # 2. Extract and Flatten
-          [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.* > Full_Kernel.zip
+          [ -f Kernel.zip.001 ] && cat Kernel.zip.* > Full_Kernel.zip
           mkdir -p kernel-source
           7z x Full_Kernel.zip -okernel-source/ -y > /dev/null
           
