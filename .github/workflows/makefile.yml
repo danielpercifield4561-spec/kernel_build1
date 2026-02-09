@@ -28,22 +28,36 @@ jobs:
 
       - name: 3. Source Reconstruction & Extraction
         run: |
+          # a. Join parts
           [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.0* > Kernel.tar.gz
+          
+          # b. Extract
           mkdir -p kernel-source
-          # Extracting (handling the fact that it's a zip renamed to tar.gz)
           7z x Kernel.tar.gz -okernel-source/ -y
           
-          # 🔍 THE FIX: Move files up if they are nested inside a subfolder
+          # c. 🗺️ MAP & FLATTEN LOGIC
           cd kernel-source
-          if [ ! -d "arch" ]; then
-            echo "📂 Files are nested. Moving them to root..."
-            NESTED_DIR=$(find . -maxdepth 2 -name "arch" -type d | rev | cut -d/ -f2- | rev)
-            if [ -n "$NESTED_DIR" ]; then
-              mv "$NESTED_DIR"/* . 2>/dev/null || true
-            fi
+          echo "📍 Current Location: $(pwd)"
+          echo "🔍 Searching for the 'arch' folder..."
+          
+          # Find where the actual code is hiding
+          ARCH_LOC=$(find . -name "arch" -type d -print -quit)
+          
+          if [ -z "$ARCH_LOC" ]; then
+            echo "❌ ERROR: Could not find 'arch' folder anywhere!"
+            exit 1
           fi
-          ls -F # Verify 'arch' is now visible here
-
+          
+          # If arch is not in the current folder, move everything up
+          if [ "$ARCH_LOC" != "./arch" ]; then
+            echo "📂 Files are nested at $ARCH_LOC. Flattening structure..."
+            SUB_DIR=$(dirname "$ARCH_LOC")
+            mv "$SUB_DIR"/* . 2>/dev/null || true
+          fi
+          
+          # d. Final Verification Map
+          echo "✅ Final Folder Map:"
+          ls -F
 
       - name: 4. Surgical Code Patching
         run: |
@@ -111,19 +125,3 @@ jobs:
                LD="$LD_PATH" \
                LLVM=1 \
                KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration"
-
-      - name: 6. AI Error Analyzer (Only on Failure)
-        if: failure()
-        run: |
-          # Use the Global Key to analyze the build failure
-          echo "🤖 Gemini is analyzing the crash..."
-          # This pulls the last 50 lines of the build log and asks Gemini for a fix
-          # (Requires a small python or node script, or we can just log the output)
-          echo "Build failed. Check the logs above for the specific CC error."
-
-      - name: 7. Upload Result
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: SM-X210-Kernel
-          path: kernel-source/arch/arm64/boot/Image.gz*
