@@ -83,13 +83,22 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. Extraction (Already solid)
+          # 1. Extraction
           7z x Kernel.zip.001 -y > /dev/null
 
-          # 🆕 THE RELAY: Find where the Makefile actually lives
-          SOURCE_ROOT=$(find . -name "Makefile" -print -quit | xargs dirname)
+          # 🆕 THE PRECISION RELAY
+          # We tell find to PRUNE (ignore) the toolchain folder 
+          # so it only looks in the extracted kernel files.
+          SOURCE_ROOT=$(find . -path "./toolchain" -prune -o -name "Makefile" -print -quit | xargs dirname)
+          
+          if [ -z "$SOURCE_ROOT" ] || [ "$SOURCE_ROOT" = "." ]; then
+             echo "❌ Could not find the Kernel Makefile. Listing files:"
+             ls -R
+             exit 1
+          fi
+
           cd "$SOURCE_ROOT"
-          echo "🎯 Working directory switched to: $(pwd)"
+          echo "🎯 Working directory correctly switched to: $(pwd)"
 
           # 2. Toolchain Discovery (Better search)
           ROOT_DIR=$GITHUB_WORKSPACE
