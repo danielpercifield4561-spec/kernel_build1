@@ -62,34 +62,38 @@ jobs:
           TCPC_DIR="drivers/usb/typec/P86801_tcpc"
           if [ -d "$TCPC_DIR" ]; then
              sed -i 's|ccflags-y +=|ccflags-y += -I$(srctree)/$(src)/inc -I$(src)/inc|g' "$TCPC_DIR/Makefile"
-          fi
-
       - name: 5. Marathon Build & Speedrun Tracker
         run: |
           cd kernel-source
-          
-          # a. Find and Apply Vendor Defconfig (SM-X210 Logic)
-          TARGET_PATH=$(find arch/arm64/configs/ -name "*defconfig" | grep -Ei "gta9p|a13|x210" | head -n 1)
-          FINAL_CONFIG=$(echo "$TARGET_PATH" | sed 's|arch/arm64/configs/||')
+
+          # 1. Broad Search: Find the config anywhere in the configs folder
+          # We look for anything that looks like your device (gta9p or x210)
+          CONF_FILE=$(find arch/arm64/configs -name "*defconfig" | grep -Ei "gta9p|x210" | head -n 1)
+  
+          if [ -z "$CONF_FILE" ]; then
+              echo "❌ CRITICAL ERROR: Could not find a defconfig for gta9p/x210!"
+            ls -R arch/arm64/configs/
+           exit 1
+          fi
+
+          # 2. Clean the path for 'make' (e.g., vendor/gta9p_defconfig)
+          FINAL_CONFIG=$(echo "$CONF_FILE" | sed 's|arch/arm64/configs/||')
           echo "🚀 Applying Config: $FINAL_CONFIG"
-          yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- "$FINAL_CONFIG"
 
-          # b. Start Background Tracker
-          while true; do
-            COUNT=$(find . -name "*.o" | wc -l)
-            echo "⏱️ [$(date +%H:%M:%S)] Speedrun Progress: $COUNT files compiled..."
-            sleep 60
-          done &
+          # 3. Generate .config
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- $FINAL_CONFIG
+  
+          # 4. Start Compilation
+          # Note: I added -j$(nproc) to use all CPU cores for speed
+          make -j$(nproc --all) \
+            ARCH=arm64 \
+            CROSS_COMPILE=aarch64-linux-android- \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            LD=${{ env.LD_PATH }} \
+            LLVM=1 \
+            KCFLAGS="-Wno-error -fno-integrated-as"
 
-          # c. The Main Build Command
-          make -j$(nproc) \
-               ARCH=arm64 \
-               CROSS_COMPILE=aarch64-linux-android- \
-               CC=clang \
-               CLANG_TRIPLE=aarch64-linux-gnu- \
-               LD="$LD_PATH" \
-               LLVM=1 \
-               KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration -ferror-limit=1"
 
       - name: 6. Final Package & Upload
         if: always()
