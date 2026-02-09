@@ -77,28 +77,34 @@ jobs:
       - name: Compile Kernel
         run: |
           # 1. Enter the source folder
-          cd kernel-source
+          cd kernel-source || { echo "❌ Folder 'kernel-source' not found!"; ls -F; exit 1; }
           
-          # 2. FORCE the config into the standard location
-          # We search for it first to make sure we have the right one
-          CONFIG_FILE=$(find .. -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+          # 2. FORCE the config placement
+          echo "🔍 Searching for defconfig..."
+          # This looks for your file anywhere and moves it to the core config folder
+          FIND_CONFIG=$(find $GITHUB_WORKSPACE -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+          
           mkdir -p arch/arm64/configs/
-          cp "$CONFIG_FILE" arch/arm64/configs/gta9pwifi_defconfig
+          cp "$FIND_CONFIG" arch/arm64/configs/gta9pwifi_defconfig
           
-          # 3. TOOLCHAIN MAPPING
-          ROOT_DIR=$GITHUB_WORKSPACE
-          GCC64="$ROOT_DIR/aarch64-linux-android-4.9/bin"
-          CLANG="$ROOT_DIR/clang/bin"
-          export ARCH=arm64
-          export CROSS_COMPILE="$GCC64/aarch64-linux-android-"
-          export PATH="$CLANG:$GCC64:$PATH"
+          # 3. VERIFY (If this fails, the build stops here with a map)
+          if [ ! -f "arch/arm64/configs/gta9pwifi_defconfig" ]; then
+            echo "❌ Config move failed! Showing directory map:"
+            ls -R arch/arm64/configs/ || echo "arch folder is missing!"
+            exit 1
+          fi
+          echo "✅ Config verified at: arch/arm64/configs/gta9pwifi_defconfig"
 
-          # 4. LOAD CONFIG (Simplified name)
+          # 4. TOOLCHAIN & BUILD
+          ROOT_DIR=$GITHUB_WORKSPACE
+          export ARCH=arm64
+          export CROSS_COMPILE="$ROOT_DIR/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
+          export PATH="$ROOT_DIR/clang/bin:$ROOT_DIR/aarch64-linux-android-4.9/bin:$PATH"
+
           echo "⚙️ Loading Config..."
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" gta9pwifi_defconfig
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
 
-          # 5. START THE BUILD
           echo "🔥 Starting Build..."
           make -j$(nproc) \
             ARCH=arm64 \
@@ -108,6 +114,7 @@ jobs:
             HOSTCC=gcc \
             HOSTCXX=g++ \
             > ../build.log 2>&1 || (tail -n 100 ../build.log && exit 1)
+
 
 
           
