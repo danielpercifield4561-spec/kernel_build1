@@ -83,15 +83,12 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. THE EXTRACTION (Force overwrite and join)
-          echo "📦 Extracting source..."
-          # We extract everything into the current folder
-          7z x Kernel.zip.001 -y > /dev/null
-          7z x Platform.zip.001 -y > /dev/null
+          # 1. ENTER THE WORKSPACE
+          # You already extracted things to 'kernel-source' in Step 5
+          cd kernel-source
           
-          # 2. TOOLCHAIN MAPPING (Direct Pathing)
-          # Since your folders are right there, we use the specific names from your 'ls'
-          ROOT_DIR=$(pwd)
+          # 2. TOOLCHAIN MAPPING (Pointing back to the root)
+          ROOT_DIR=$GITHUB_WORKSPACE
           GCC64="$ROOT_DIR/aarch64-linux-android-4.9/bin"
           CLANG="$ROOT_DIR/clang/bin"
           
@@ -99,13 +96,9 @@ jobs:
           export CROSS_COMPILE="$GCC64/aarch64-linux-android-"
           export PATH="$CLANG:$GCC64:$PATH"
 
-          # 3. CONFIG SETUP
-          # You mentioned the defconfig is in the root, so we move it to the right home
-          echo "⚙️ Setting up Config..."
-          mkdir -p arch/arm64/configs/vendor/
-          cp gta9pwifi_eur_open_defconfig arch/arm64/configs/vendor/ 2>/dev/null || true
-          
-          # Now load it
+          # 3. CONFIG LOAD
+          # We use the config we placed in Step 5
+          echo "⚙️ Loading Config..."
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" vendor/gta9pwifi_eur_open_defconfig
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
 
@@ -118,7 +111,8 @@ jobs:
             CLANG_TRIPLE=aarch64-linux-gnu- \
             HOSTCC=gcc \
             HOSTCXX=g++ \
-            > build.log 2>&1 || (tail -n 100 build.log && exit 1)
+            > ../build.log 2>&1 || (tail -n 100 ../build.log && exit 1)
+
           
            # 6. THE AUTO-DETECTION
            if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
@@ -167,15 +161,21 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          # Capture the last bit of the log
-          echo "Sending logs to Gemini for analysis..."
-          LOG_DATA=$(tail -n 50 build.log) 
+          echo "🔍 Gathering diagnostic data..."
           
-          # This curl command sends the log to me
+          # Check if build.log exists, otherwise grab the 'ls' output
+          if [ -f "build.log" ]; then
+            LOG_DATA=$(tail -n 50 build.log)
+          else
+            LOG_DATA="Build log not found. Current Directory State: $(ls -F)"
+          fi
+          
+          # Send to Gemini
           curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$GEMINI_API_KEY" \
           -H 'Content-Type: application/json' \
           -d "{
             \"contents\": [{
-              \"parts\":[{\"text\": \"The kernel build failed with this log: $LOG_DATA. What is the exact fix?\"}]
+              \"parts\":[{\"text\": \"The GitHub Action failed. Context: $LOG_DATA. What is the pathing error?\"}]
             }]
           }" | jq '.candidates[0].content.parts[0].text'
+
