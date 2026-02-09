@@ -26,32 +26,40 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libtinfo5 libncurses5 libssl-dev 7zip
 
-      - name: 3. Smart Extraction & Flattening
+      - name: 3. Nuclear Extraction & Deep Mapping
         run: |
-          # 1. Join and Decompress
+          # 1. Join split files
           [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.0* > Kernel.tar.gz
           mkdir -p kernel-source
+
+          # 2. Force Extraction (Extract everything, ignore errors)
+          echo "🔓 Extracting all layers..."
+          7z x Kernel.tar.gz -okernel-source/ -y > /dev/null
           
-          # Detect if it's a real GZIP or a ZIP-in-disguise
-          FILE_TYPE=$(file -b --mime-type Kernel.tar.gz)
-          echo "🧬 DNA Check: $FILE_TYPE"
+          cd kernel-source
+
+          # 3. 🗺️ Deep Scan: Find the 'arch' folder anywhere
+          ARCH_PATH=$(find . -name "arch" -type d -print -quit)
           
-          if [[ "$FILE_TYPE" == *"zip"* ]]; then
-            7z x Kernel.tar.gz -okernel-source/ -y
+          if [ -n "$ARCH_PATH" ]; then
+            echo "📍 Found 'arch' at: $ARCH_PATH"
+            # Get the parent directory of 'arch'
+            SOURCE_ROOT=$(dirname "$ARCH_PATH")
+            
+            if [ "$SOURCE_ROOT" != "." ]; then
+              echo "📂 Flattening: Moving files from $SOURCE_ROOT to $(pwd)"
+              mv "$SOURCE_ROOT"/* . 2>/dev/null || true
+            fi
           else
-            tar -xzvf Kernel.tar.gz -C kernel-source/
+            echo "❌ ERROR: 'arch' folder not found anywhere in the archive!"
+            echo "📂 Here is what WAS found:"
+            find . -maxdepth 3 -type d
+            exit 1
           fi
 
-          # 2. 🗺️ The "GPS" Fix: Find and Move 'arch' to the front
-          cd kernel-source
-          REAL_ROOT=$(find . -name "arch" -type d -print -quit | sed 's|/arch||')
-          if [ "$REAL_ROOT" != "." ]; then
-            echo "📂 Moving files from $REAL_ROOT to main directory..."
-            mv "$REAL_ROOT"/* . 2>/dev/null || true
-          fi
-          
-          # 3. Final Check
-          ls -F arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig || echo "❌ STILL MISSING!"
+          # 4. Final Confirmation
+          echo "✅ Root Contents:"
+          ls -F
 
       - name: 4. Surgical Code Patching
         run: |
