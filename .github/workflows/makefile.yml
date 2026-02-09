@@ -14,36 +14,43 @@ jobs:
       - name: 1. Initialization
         uses: actions/checkout@v4
 
-      - name: 2. Environment Setup & Early Extraction
+      - name: 2. Environment Setup & Space Guard
         run: |
-          # a. Pull Toolchains (Standard stuff)
+          # 🛰️ Space Guard: Check 'Juice' levels
+          echo "📊 Available Disk Space Before Setup:"
+          df -h | grep "/home"
+
+          # a. Pull Toolchains & STRIP 'DEBT' (Delete .git to save space)
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
-          git clone --depth=1 https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
+          rm -rf aarch64-linux-android-4.9/.git
           
-          # b. The Precision Join (Checking if parts exist first)
-          echo "🧩 Joining Kernel parts..."
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
+          rm -rf arm-linux-androideabi-4.9/.git
+          
+          git clone --depth=1 https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
+          rm -rf clang/.git
+          
+          # b. The Precision Join
           if ls Kernel.tar.gz.* 1> /dev/null 2>&1; then
             cat Kernel.tar.gz.* > Full_Kernel.zip
-            echo "✅ Joined successfully: $(du -sh Full_Kernel.zip)"
+            rm Kernel.tar.gz.* # 🗑️ Clean up split parts immediately to save space
           else
-            echo "⚠️ No split parts found, looking for single file..."
             [ -f Kernel.tar.gz ] && mv Kernel.tar.gz Full_Kernel.zip
           fi
 
-          # c. The "Wowza" Extraction
+          # c. Extraction
           mkdir -p kernel-source
-          # We use -mmt=on to speed it up and avoid the 123 exit code
-          7z x Full_Kernel.zip -okernel-source/ -y -mmt=on || echo "Extraction finished with warnings"
+          7z x Full_Kernel.zip -okernel-source/ -y -mmt=on > /dev/null
+          rm Full_Kernel.zip # 🗑️ More space for the 'Juicy' stuff
           
-          # d. Immediate Flattening
-          # Look for the arch folder specifically
+          # d. Flattening (The 'Wowza' move)
           REAL_SRC=$(find kernel-source/ -name "arch" -type d -print -quit | xargs dirname)
           if [ -n "$REAL_SRC" ] && [ "$REAL_SRC" != "kernel-source" ]; then
-            echo "Moving guts from $REAL_SRC to kernel-source root..."
             mv "$REAL_SRC"/* kernel-source/ 2>/dev/null || true
           fi
 
+          echo "📊 Available Disk Space After Setup:"
+          df -h | grep "/home"
 
       - name: 3. Visibility Check & Permission Grant
         run: |
