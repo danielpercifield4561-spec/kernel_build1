@@ -56,18 +56,6 @@ jobs:
           mkdir -p kernel-source/arch/arm64/configs/vendor/
           cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
           echo "✅ Config placed in vendor folder."
-
-      - name: Live Build Progress
-        run: |
-          echo "🚀 Speed-run Tracker Started!"
-          while true; do
-          # Count how many .o files (compiled objects) exist right now
-          COUNT=$(find . -name "*.o" | wc -l)
-          # Get a timestamp
-          TS=$(date +"%H:%M:%S")
-          echo "⏱️ [$TS] Progress: $COUNT files compiled... still cooking! 🔥"
-          sleep 30
-          done & 
       
       - name: Install Legacy Dependencies
         run: |
@@ -161,24 +149,33 @@ jobs:
             echo "✅ Patched TCPC Makefile"
            fi
 
-      - name: 🔥 Build Kernel
+      - name: 🏗️ Marathon Build & Speedrun Tracker
         run: |
-           # 1. DEFCONFIG STEP (Crucial!)
-           # Replace 'gki_defconfig' with your specific model's defconfig if different
-           echo "📝 Generating .config..."
-           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" gki_defconfig
+          # 1. FIND THE MAP (Defconfig)
+          echo "🔍 Investigating arch/arm64/configs/..."
+          ls arch/arm64/configs/
         
-            # 2. START THE TRACKER (Speed-run test)
-           echo "🚀 Speed-run Tracker Started!"
+              TARGET_CONFIG=$(find arch/arm64/configs/ -name "*defconfig" | grep -Ei "a13|x210|tiger|gki|vendor" | head -n 1 | xargs basename)
+        
+              if [ -z "$TARGET_CONFIG" ]; then
+          TARGET_CONFIG=$(ls arch/arm64/configs/ | grep "defconfig" | grep -v "^defconfig$" | head -n 1)
+              fi
+
+              echo "🚀 Winner found: $TARGET_CONFIG"
+              # Generate the .config and auto-confirm any new prompts
+              yes "" | make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" "$TARGET_CONFIG"
+
+             # 2. START THE SPEEDRUN TRACKER
+          echo "🏎️ Speed-run Tracker Started!"
            while true; do
            COUNT=$(find . -name "*.o" | wc -l)
-           echo "⏱️ [$(date +%H:%M:%S)] Progress: $COUNT files compiled..."
-           sleep 60
-           done &
+            echo "⏱️ [$(date +%H:%M:%S)] Progress: $COUNT files compiled..."
+            sleep 60
+            done &
 
-           # 3. THE COMPILATION
-           echo "🏗️ Starting the marathon build..."
-           make -j1 \
+             # 3. THE COMPILATION
+             echo "🔥 Starting the marathon build..."
+             make -j1 \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
              CC=clang \
