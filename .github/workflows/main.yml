@@ -35,24 +35,24 @@ jobs:
 
       - name: 📦 Reconstruct and Merge Source
         run: |
-          echo "🔗 Combining Kernel pieces..."
-          if [ -d "Kernel.zip" ]; then
-            cat Kernel.zip/Kernel.zip.0* > Combined_Kernel.zip
-          else
-            echo "❌ Kernel.zip folder not found!"; ls -R; exit 1
-          fi
+          echo "🔗 Combining Kernel pieces from root..."
+          # Since the log shows files are in the main folder, we 'cat' them here
+          cat Kernel.zip.0* > Combined_Kernel.zip
           
-          if [ -d "Platform.zip" ]; then
-            cat Platform.zip/Platform.zip.0* > Combined_Platform.zip
-          fi
+          echo "🔗 Combining Platform pieces from root..."
+          cat Platform.zip.0* > Combined_Platform.zip
           
           mkdir -p kernel-source
+          echo "📦 Extracting Kernel..."
           7z x Combined_Kernel.zip -okernel-source/
+          
+          echo "📦 Merging Platform into source..."
           7z x Combined_Platform.zip -aoa -okernel-source/
           
-          # DELETE THE FOLDERS to free up RAM/Disk for the compiler
-          rm -rf Kernel.zip Platform.zip Combined_Kernel.zip Combined_Platform.zip
-          echo "✅ Source tree merged and space cleaned."
+          # Clean up the big temporary zips
+          rm Combined_Kernel.zip Combined_Platform.zip
+          echo "✅ Source tree merged."
+
 
       - name: ⚙️ Compile Kernel
         run: |
