@@ -1,44 +1,43 @@
 Name: SM-X210 Kernel Speedrun
 
 on:
-  workflow_dispatch:
-
+workflow_dispatch:
 jobs:
-  build-kernel:
-    runs-on: ubuntu-latest
-    steps:
-      - name: 1. Initialization
-        uses: actions/checkout@v4.]
+build-kernel:
+  runs-on: ubuntu-latest
+  steps:
+     - name: 1. Initialization
+         uses actions/checkout@v4.]
 
-      - name: 2. Environment Setup
-        run: |
-          # a. Load config variables
-          echo "KERNEL_CONFIG=${{ github.event.inputs.kernel_config }}" >> $GITHUB_ENV
+     - name: 2. Environment Setup
+       run: |
+         # a. Load config variables
+         echo "KERNEL_CONFIG=${{ github.event.inputs.kernel_config }}" >> $GITHUB_ENV
           
-          # b. Pull Toolchains
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
-          git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
+         # b. Pull Toolchains
+         git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
+         git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
+         git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
           
-          # c. Install Legacy Dependencies
-          sudo add-apt-repository 'deb http://azure.archive.ubuntu.com/ubuntu/ focal main universe'
-          sudo apt-get update
-          sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
+         # c. Install Legacy Dependencies
+         sudo add-apt-repository 'deb http://azure.archive.ubuntu.com/ubuntu/ focal main universe'
+         sudo apt-get update
+         sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
 
-      - name: 3. Source Reconstruction & Extraction
-        run: |
-          # a. Merge split archives
-          cat Kernel.tar.gz.0* > Kernel.tar.gz
-          echo "✅ Rejoined Size: $(du -sh Kernel.tar.gz)"
+     - name: 3. Source Reconstruction & Extraction
+       run: |
+         # a. Merge split archives
+         cat Kernel.tar.gz.0* > Kernel.tar.gz
+         echo "✅ Rejoined Size: $(du -sh Kernel.tar.gz)"
           
-          # b. Extract to workspace
-          mkdir -p kernel-source
-          7z x Kernel.tar.gz -okernel-source/
+         # b. Extract to workspace
+         mkdir -p kernel-source
+         7z x Kernel.tar.gz -okernel-source/
           
-          # c. Setup Toolchain Paths
-          ROOT_DIR=$(pwd)
-          echo "LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)" >> $GITHUB_ENV
-          echo "CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)" >> $GITHUB_ENV
+         # c. Setup Toolchain Paths
+         ROOT_DIR=$(pwd)
+            echo "LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)" >> $GITHUB_ENV
+            echo "CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)" >> $GITHUB_ENV
 
       - name: 4. Surgical Code Patching
         run: |
