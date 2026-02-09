@@ -57,6 +57,18 @@ jobs:
           cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
           echo "✅ Config placed in vendor folder."
 
+      - name: Live Build Progress
+        run: |
+          echo "🚀 Speed-run Tracker Started!"
+          while true; do
+          # Count how many .o files (compiled objects) exist right now
+          COUNT=$(find . -name "*.o" | wc -l)
+          # Get a timestamp
+          TS=$(date +"%H:%M:%S")
+          echo "⏱️ [$TS] Progress: $COUNT files compiled... still cooking! 🔥"
+          sleep 30
+          done & 
+      
       - name: Install Legacy Dependencies
         run: |
           # Add the Ubuntu 20.04 (Focal) repository for legacy libs
@@ -149,8 +161,23 @@ jobs:
             echo "✅ Patched TCPC Makefile"
            fi
 
-           # 5. THE MARATHON BUILD
-           echo "🔥 Starting the build..."
+      - name: 🔥 Build Kernel
+        run: |
+           # 1. DEFCONFIG STEP (Crucial!)
+           # Replace 'gki_defconfig' with your specific model's defconfig if different
+           echo "📝 Generating .config..."
+           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" gki_defconfig
+        
+            # 2. START THE TRACKER (Speed-run test)
+           echo "🚀 Speed-run Tracker Started!"
+           while true; do
+           COUNT=$(find . -name "*.o" | wc -l)
+           echo "⏱️ [$(date +%H:%M:%S)] Progress: $COUNT files compiled..."
+           sleep 60
+           done &
+
+           # 3. THE COMPILATION
+           echo "🏗️ Starting the marathon build..."
            make -j1 \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
@@ -160,16 +187,16 @@ jobs:
              LLVM=1 \
              KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration -ferror-limit=1"
          
-          # 6. THE AUTO-DETECTION
-          if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
-          echo "❌ Build failed. Here are the last 100 lines of the log:"
-          tail -n 100 build.log
-          exit 1
-          else
-          echo "✅ KERNEL CREATED SUCCESSFULLY!"
-          mkdir -p final_output
-          cp arch/arm64/boot/Image.gz-dtb final_output/
-          fi
+            # 6. THE AUTO-DETECTION
+            if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
+            echo "❌ Build failed. Here are the last 100 lines of the log:"
+            tail -n 100 build.log
+            exit 1
+            else
+            echo "✅ KERNEL CREATED SUCCESSFULLY!"
+            mkdir -p final_output
+            cp arch/arm64/boot/Image.gz-dtb final_output/
+            fi
 
   
       
