@@ -1,11 +1,11 @@
 Name: SM-X210 Kernel Speedrun
 
 on:
-workflow_dispatch:
-jobs:
-build-kernel:
+ workflow_dispatch:
+ jobs:
+     build-kernel:
        runs-on: ubuntu-latest
-steps:
+     steps: 
      - name: 1. Initialization
          uses actions/checkout@v4.]
 
@@ -39,9 +39,9 @@ steps:
             echo "LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)" >> $GITHUB_ENV
             echo "CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)" >> $GITHUB_ENV
 
-      - name: 4. Surgical Code Patching
-        run: |
-          cd kernel-source
+     - name: 4. Surgical Code Patching
+       run: |
+         cd kernel-source
           
           # a. Robust WALT Patching (Permission & Loop Aware)
           WALT_TRACE_FILE=$(find kernel/sched/walt -name "*trace.h" | head -n 1)
@@ -114,3 +114,8 @@ steps:
         with:
           name: SM-X210-Kernel-Speedrun
           path: out/*
+
+
+-name: Setup Java JDK
+uses: actions/setup-java@v5.2.0
+ 
