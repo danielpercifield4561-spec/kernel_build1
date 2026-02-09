@@ -30,29 +30,29 @@ jobs:
           git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
       - name: Rejoin Kernel Parts
         run: |
-          # This takes Kernel.tar.gz.01, .02, etc. and merges them
+          # This takes Kernel.zip.01, .02, etc. and merges them
           # The '?' or '*' wildcard ensures they stay in numerical order
-          cat Kernel.tar.gz.0* > Kernel.tar.gz
+          cat Kernel.zip.0* > Kernel.zip
         
           # Verify the file now exists and show its size
-          ls -lh Kernel.tar.gz
+          ls -lh Kernel.zip
         
       - name: Reconstruct and Prepare Source
         run: |
           # 1. Join the .01, .02 pieces into one file
           # Using 0* handles .01, .02... through .09 correctly
-          cat Kernel.tar.gz.0* > Kernel.tar.gz
+          cat Kernel.zip.0* > Kernel.zip
         
           # 2. Check if the join worked
-          if [ ! -f "Kernel.tar.gz" ]; then
+          if [ ! -f "Kernel.zip" ]; then
             echo "❌ ERROR: Kernel.tar.gz still missing after join attempt!"
             ls -R
            exit 1
           fi
-          echo "✅ Kernel.tar.gz rejoined. Size: $(du -sh Kernel.tar.gz)"
+          echo "✅ Kernel.zip rejoined. Size: $(du -sh Kernel.zip)"
           # 3. Extract it
           mkdir -p kernel-source
-          7z x Kernel.tar.gz -okernel-source/
+          7z x Kernel.zip -okernel-source/
         
           # 4. Place your config file (Now that source folder exists)
           mkdir -p kernel-source/arch/arm64/configs/vendor/
@@ -84,8 +84,8 @@ jobs:
       - name: Compile Kernel
         run: |
           # 1. Extraction
-          7z x Kernel.tar.gz.001 -y > /dev/null
-          if [ -f "Kernel.tar.gz" ]; then tar -xf Kernel.tar.gz; fi
+          7z x Kernel.zip.001 -y > /dev/null
+          if [ -f "Kernel.zip" ]; then tar -xf Kernel.zip; fi
           # 2. Toolchain Discovery
           ROOT_DIR=$(pwd)
           LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)
