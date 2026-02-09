@@ -97,33 +97,32 @@ jobs:
           # 1. Enter the source folder
           cd kernel-source || { echo "❌ Folder 'kernel-source' not found!"; ls -F; exit 1; }
           
-          # 2. FORCE the config placement
-          echo "🔍 Searching for defconfig..."
-          # This looks for your file anywhere and moves it to the core config folder
-          FIND_CONFIG=$(find $GITHUB_WORKSPACE -name "gta9pwifi_eur_open_defconfig" | head -n 1)
-          
-          mkdir -p arch/arm64/configs/
-          cp "$FIND_CONFIG" arch/arm64/configs/gta9pwifi_defconfig
-          
-          # 3. VERIFY (If this fails, the build stops here with a map)
-          if [ ! -f "arch/arm64/configs/gta9pwifi_defconfig" ]; then
-            echo "❌ Config move failed! Showing directory map:"
-            ls -R arch/arm64/configs/ || echo "arch folder is missing!"
-            exit 1
-          fi
-          echo "✅ Config verified at: arch/arm64/configs/gta9pwifi_defconfig"
-
-          # 4. TOOLCHAIN & BUILD
+          # 2. TOOLCHAIN SETUP
           ROOT_DIR=$GITHUB_WORKSPACE
           export ARCH=arm64
           export CROSS_COMPILE="$ROOT_DIR/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
           export PATH="$ROOT_DIR/clang/bin:$ROOT_DIR/aarch64-linux-android-4.9/bin:$PATH"
 
-          echo "⚙️ Loading Config..."
-          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" gta9pwifi_defconfig
+          # 3. THE "FORCE-FEED" CONFIG (Bypasses 'No rule to make target')
+          echo "🔍 Finding and forcing config..."
+          FIND_CONFIG=$(find $GITHUB_WORKSPACE -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+          
+          if [ -z "$FIND_CONFIG" ]; then
+            echo "❌ Could not find gta9pwifi_eur_open_defconfig anywhere!"
+            exit 1
+          fi
+
+          # Instead of placing it in arch/arm64/configs, we put it in the ROOT as .config
+          cp "$FIND_CONFIG" .config
+          echo "✅ Config force-fed to .config"
+
+          # 4. REFRESH CONFIG
+          echo "⚙️ Refreshing config dependencies..."
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
 
+          # 5. START THE BUILD
           echo "🔥 Starting Build..."
+          # Note: We save logs to ../build.log so the Gemini Hook can find it if this fails
           make -j$(nproc) \
             ARCH=arm64 \
             CROSS_COMPILE="$CROSS_COMPILE" \
@@ -131,25 +130,17 @@ jobs:
             CLANG_TRIPLE=aarch64-linux-gnu- \
             HOSTCC=gcc \
             HOSTCXX=g++ \
-            > ../build.log 2>&1 || (tail -n 100 ../build.log && exit 1)
+            > ../build.log 2>&1 || (echo "❌ BUILD CRASHED"; tail -n 100 ../build.log && exit 1)
 
-
-
-          
-           # 6. THE AUTO-DETECTION
-           if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
-           echo "❌ Build failed. Here are the last 100 lines of the log:"
-           tail -n 100 build.log
-           exit 1
+           # 6. VERIFY OUTPUT
+           if [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
+             echo "❌ Image.gz-dtb not found!"
+             exit 1
            else
-           echo "✅ KERNEL CREATED SUCCESSFULLY!"
-           mkdir -p final_output
-           cp arch/arm64/boot/Image.gz-dtb final_output/
-          fi
-  
-      
-
-
+             echo "✅ KERNEL CREATED SUCCESSFULLY!"
+             mkdir -p ../final_output
+             cp arch/arm64/boot/Image.gz-dtb ../final_output/
+           fi
              
       - name: Final Package and Upload
         run: |
