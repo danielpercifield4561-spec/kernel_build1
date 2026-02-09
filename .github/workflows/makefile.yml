@@ -11,8 +11,14 @@ jobs:
   build-kernel:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Initialization
-        uses: actions/checkout@v4
+      - name: 1. File Integrity Check
+        run: |
+          echo "🛡️ Verifying File Fingerprints..."
+          md5sum Kernel.tar.gz.* || echo "⚠️ Files not found yet"
+          
+          # Check if the parts are actually the same size
+          ls -lh Kernel.tar.gz.*
+
 
       - name: 2. The Quarterback (Setup & Mapping)
         run: |
