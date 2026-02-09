@@ -28,45 +28,30 @@ jobs:
 
       - name: 3. Smart Extraction & Flattening
         run: |
-          # 📝 Define the Smart Extraction Function
-          smart_extract() {
-            FILE_TO_OPEN="$1"
-            # Get the actual MIME type, ignoring the extension
-            MIME_TYPE=$(file -b --mime-type "$FILE_TO_OPEN")
-            echo "🧬 DNA Check: $FILE_TO_OPEN is actually $MIME_TYPE"
-
-            case "$MIME_TYPE" in
-              "application/gzip" | "application/x-gzip")
-                echo "🔓 Opening as true GZIP..."
-                tar -xzvf "$FILE_TO_OPEN" -C kernel-source/ ;;
-              "application/zip")
-                echo "🔓 Opening as ZIP (Renamed Gzip)..."
-                7z x "$FILE_TO_OPEN" -okernel-source/ -y ;;
-              *)
-                echo "⚠️ Unknown type, attempting 7z fallback..."
-                7z x "$FILE_TO_OPEN" -okernel-source/ -y ;;
-            esac
-          }
-
-          # 1. Join parts if split
+          # 1. Join and Decompress
           [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.0* > Kernel.tar.gz
-          
-          # 2. Run the function
           mkdir -p kernel-source
-          smart_extract Kernel.tar.gz
-
-          # 3. 🗺️ Flattening Logic (The "Where's the Arch?" Fix)
-          cd kernel-source
-          ARCH_DIR=$(find . -name "arch" -type d -print -quit)
-          if [ -n "$ARCH_DIR" ] && [ "$ARCH_DIR" != "./arch" ]; then
-            SUB_DIR=$(dirname "$ARCH_DIR")
-            echo "📂 Moving files from nested folder $SUB_DIR to root..."
-            mv "$SUB_DIR"/* . 2>/dev/null || true
+          
+          # Detect if it's a real GZIP or a ZIP-in-disguise
+          FILE_TYPE=$(file -b --mime-type Kernel.tar.gz)
+          echo "🧬 DNA Check: $FILE_TYPE"
+          
+          if [[ "$FILE_TYPE" == *"zip"* ]]; then
+            7z x Kernel.tar.gz -okernel-source/ -y
+          else
+            tar -xzvf Kernel.tar.gz -C kernel-source/
           fi
 
-          echo "✅ Extraction Complete. Directory Map:"
-          ls -F
-
+          # 2. 🗺️ The "GPS" Fix: Find and Move 'arch' to the front
+          cd kernel-source
+          REAL_ROOT=$(find . -name "arch" -type d -print -quit | sed 's|/arch||')
+          if [ "$REAL_ROOT" != "." ]; then
+            echo "📂 Moving files from $REAL_ROOT to main directory..."
+            mv "$REAL_ROOT"/* . 2>/dev/null || true
+          fi
+          
+          # 3. Final Check
+          ls -F arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig || echo "❌ STILL MISSING!"
 
       - name: 4. Surgical Code Patching
         run: |
