@@ -4,8 +4,8 @@ on:
 workflow_dispatch:
 jobs:
 build-kernel:
-  runs-on: ubuntu-latest
-  steps:
+       runs-on: ubuntu-latest
+steps:
      - name: 1. Initialization
          uses actions/checkout@v4.]
 
