@@ -6,7 +6,6 @@ on:
 # 🌎 GLOBAL HOOK: Every step now has the Gemini Key
 env:
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-  CROSS_COMPILE_PATH: /home/runner/work/your-repo-name/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 
 jobs:
   build-kernel:
@@ -29,22 +28,15 @@ jobs:
 
       - name: 3. Source Reconstruction & Extraction
         run: |
-          # a. Join parts
           [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.0* > Kernel.tar.gz
-          
-          # b. Extract into a clean, local folder
           mkdir -p kernel-source
           7z x Kernel.tar.gz -okernel-source/ -y
-          
-          # c. Verify - This prevents the "No such file" error later
-          ls -R kernel-source/arch/arm64/configs/vendor/ || echo "⚠️ Vendor configs not found!"
+          ls -F kernel-source/
 
       - name: 4. Surgical Code Patching
         run: |
           cd kernel-source
-          
-          # a. Robust WALT Patching
-          WALT_TRACE_FILE=$(find . -name "walt/trace.h" -o -name "walt_trace.h" | head -n 1)
+          WALT_TRACE_FILE=$(find . -name "trace.h" | grep "walt" | head -n 1)
           if [ -n "$WALT_TRACE_FILE" ]; then
             chmod +w "$WALT_TRACE_FILE"
             printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
@@ -57,19 +49,42 @@ jobs:
       - name: 5. Marathon Build
         run: |
           cd kernel-source
-          
-          # a. Setup Paths
-          ROOT_DIR=$(pwd)
           LD_PATH=$(find ../aarch64-linux-android-4.9 -name "aarch64-linux-android-ld" | head -n 1)
           CLANG_PATH=$(find ../clang -name "clang" -type f | grep "bin/clang" | head -n 1)
           
-          # b. Apply Config
+          # Use find to get the exact relative path for the vendor config
           TARGET_CONFIG=$(find arch/arm64/configs/ -name "gta9pwifi_eur_open_defconfig" | sed 's|arch/arm64/configs/||')
+          
           yes "" | make ARCH=arm64 CROSS_COMPILE=../aarch64-linux-android-4.9/bin/aarch64-linux-android- "$TARGET_CONFIG"
 
-          # c. Main Build
+          # Run make and log output for the AI to analyze if it fails
           make -j$(nproc) \
                ARCH=arm64 \
+               CROSS_COMPILE=../aarch64-linux-android-4.9/bin/aarch64-linux-android- \
+               CC="$CLANG_PATH" \
+               CLANG_TRIPLE=aarch64-linux-gnu- \
+               LD="$LD_PATH" \
+               LLVM=1 \
+               KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration" 2>&1 | tee build_output.log
+
+      - name: 6. 🤖 AI Error Analyzer (Only on Failure)
+        if: failure()
+        run: |
+          echo "🤖 Sending crash logs to Gemini for surgical analysis..."
+          # Grab last 50 lines of the build log
+          ERROR_LOG=$(tail -n 50 kernel-source/build_output.log)
+          
+          # Use npx to call Gemini directly from the shell
+          npx @google/gemini-cli "I am building a kernel for SM-X210. The build failed with this error: $ERROR_LOG. Please provide a specific terminal command or code fix to solve this."
+
+      - name: 7. Final Package & Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SM-X210-Result
+          path: |
+            kernel-source/arch/arm64/boot/Image.gz*
+            kernel-source/build_output.log
                CROSS_COMPILE=../aarch64-linux-android-4.9/bin/aarch64-linux-android- \
                CC="$CLANG_PATH" \
                CLANG_TRIPLE=aarch64-linux-gnu- \
