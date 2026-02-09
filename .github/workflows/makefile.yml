@@ -11,6 +11,9 @@ jobs:
   build-kernel:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4  # <--- THIS IS THE "DOWNLOAD" BUTTON
+
       - name: 1. File Integrity Check
         run: |
           echo "🛡️ Verifying File Fingerprints..."
