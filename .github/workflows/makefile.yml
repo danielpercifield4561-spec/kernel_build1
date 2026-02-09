@@ -105,7 +105,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SM-X210-Kernel-Result
-          path: out/*
-			 - name: Setup Java JDK
-				  uses: actions/setup-java@v5.2.0
- 
+          path: out/* 
