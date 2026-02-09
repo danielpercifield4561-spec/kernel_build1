@@ -28,38 +28,38 @@ jobs:
 
       - name: 3. Total Visibility & Root Leveling
         run: |
-          # 1. Join & Extract
-          [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.0* > Kernel.tar.gz
+          # 1. Join & Force Extract (Don't let it stop on warnings)
+          [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.0* > Kernel.tar.gz || echo "No split files"
           mkdir -p kernel-source
-          7z x Kernel.tar.gz -okernel-source/ -y > /dev/null
+          7z x Kernel.tar.gz -okernel-source/ -y || echo "Extraction had warnings but continuing..."
 
+          # 2. Enter and FORCE a deep search
           cd kernel-source
-
-          # 2. 🔍 The 'Deep Find' Strategy
-          # We look for the 'Makefile' because it's the heart of the source
-          MAKE_PATH=$(find . -maxdepth 4 -name "Makefile" -print -quit)
+          echo "📍 Current Working Directory: $(pwd)"
+          echo "🔎 Running Deep Scan for 'arch' folder..."
           
-          if [ -n "$MAKE_PATH" ]; then
-            SOURCE_ROOT=$(dirname "$MAKE_PATH")
-            echo "📍 Found Source Heart at: $SOURCE_ROOT"
+          # This lists EVERYTHING for the first 3 levels so we can see what's happening
+          ls -R | head -n 20 
+
+          # Find the heart of the code
+          HEART_PATH=$(find . -maxdepth 5 -name "Makefile" -print -quit)
+          
+          if [ -n "$HEART_PATH" ]; then
+            SOURCE_ROOT=$(dirname "$HEART_PATH")
+            echo "🎯 TARGET FOUND at: $SOURCE_ROOT"
             
-            # If it's not in the current directory, move everything UP
+            # Pull everything to the surface
             if [ "$SOURCE_ROOT" != "." ]; then
               echo "📂 Leveling: Moving all files from $SOURCE_ROOT to $(pwd)"
-              mv "$SOURCE_ROOT"/* . 2>/dev/null || true
-              mv "$SOURCE_ROOT"/.* . 2>/dev/null || true # Get hidden files too
+              cp -rf "$SOURCE_ROOT"/* . 2>/dev/null || true
+              # Verify again
+              [ -d "arch" ] && echo "✅ SUCCESS: Arch is now visible!"
             fi
           else
-            echo "❌ CRITICAL: No Makefile or arch folder found!"
-            echo "Listing all directories found for debugging:"
+            echo "❌ CRITICAL: The search came up empty. Here is the full map:"
             find . -maxdepth 3 -type d
             exit 1
           fi
-
-          # 3. Final Verification
-          echo "✅ Visibility Check:"
-          ls -F
-
 
           # 4. Final Confirmation
           echo "✅ Root Contents:"
