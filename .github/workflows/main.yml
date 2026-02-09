@@ -1,4 +1,4 @@
-name: Android Kernel CI
+name: Android Kernel CI (Tab A9+)
 
 on:
   workflow_dispatch:
@@ -14,61 +14,73 @@ jobs:
         run: |
           sudo docker image prune -a -f
           sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
-          echo "✅ Disk space cleared for tablet-friendly run."
+          df -h
 
       - name: 🛠️ Set Up Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential zip curl libstdc++6 git wget 7zip python3
-          # Clang and GCC toolchains (LineageOS versions are faster to clone)
+          sudo apt-get install -y bc build-essential zip curl libstdc++6 git wget 7zip python3 libssl-dev libelf-dev
+          
+          # Clone Toolchains
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-4691093 clang
+          
+          # PERSIST PATHS TO RUNNER ENVIRONMENT (CRITICAL)
+          echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
+          echo "$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin" >> $GITHUB_PATH
+          echo "ARCH=arm64" >> $GITHUB_ENV
+          echo "SUBARCH=arm64" >> $GITHUB_ENV
+          echo "KBUILD_COMPILER_STRING=$(clang --version | head -n 1)" >> $GITHUB_ENV
 
       - name: 📦 Reconstruct and Merge Source
         run: |
-          echo "🔗 Combining Kernel and Platform pieces..."
-          cat Kernel.zip/Kernel.zip.0* > Combined_Kernel.zip
-          cat Platform.zip/Platform.zip.0* > Combined_Platform.zip
+          echo "🔗 Combining Kernel pieces..."
+          # Check if source directories exist before cat
+          if [ -d "Kernel.zip" ]; then
+            cat Kernel.zip/Kernel.zip.0* > Combined_Kernel.zip
+          else
+            echo "❌ Kernel.zip folder not found! Check your repo structure." && exit 1
+          fi
+          
+          if [ -d "Platform.zip" ]; then
+            cat Platform.zip/Platform.zip.0* > Combined_Platform.zip
+          fi
           
           mkdir -p kernel-source
-          echo "📦 Extracting Kernel..."
           7z x Combined_Kernel.zip -okernel-source/
-          
-          echo "📦 Merging Platform into source..."
           7z x Combined_Platform.zip -aoa -okernel-source/
           
-          # Massive cleanup to prevent "Angry Unicorn" timeouts
           rm Combined_Kernel.zip Combined_Platform.zip
-          echo "✅ Full source tree merged."
+          echo "✅ Source tree merged."
 
       - name: ⚙️ Compile Kernel
         run: |
-          cd kernel-source || { echo "❌ Source not found!"; exit 1; }
+          cd kernel-source
           
-          # TOOLCHAIN SETUP
-          ROOT_DIR=$GITHUB_WORKSPACE
-          export ARCH=arm64
-          export CROSS_COMPILE="$ROOT_DIR/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
-          export PATH="$ROOT_DIR/clang/bin:$ROOT_DIR/aarch64-linux-android-4.9/bin:$PATH"
-
-          # FORCE CONFIG
-          FIND_CONFIG=$(find $GITHUB_WORKSPACE -name "gta9pwifi_eur_open_defconfig" | head -n 1)
-          cp "$FIND_CONFIG" .config
+          # Dynamic toolchain pathing
+          CROSS_COMPILE_PATH="$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
           
-          # LEGACY REFRESH (The "yes" trick for old kernels)
-          echo "⚙️ Refreshing config (Legacy style)..."
-          yes "" | make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" oldconfig
-
+          # FIND CONFIG (More robust)
+          DEFCONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" -type f | head -n 1)
+          if [ -z "$DEFCONFIG_PATH" ]; then
+             echo "❌ Could not find gta9pwifi_eur_open_defconfig in source tree!"
+             find . -name "*defconfig" | head -n 20
+             exit 1
+          fi
+          
+          cp "$DEFCONFIG_PATH" arch/arm64/configs/tmp_defconfig
+          
+          make O=out ARCH=arm64 tmp_defconfig
+          
           # START BUILD
           echo "🔥 Starting Build..."
-          make -j$(nproc) \
+          make -j$(nproc --all) O=out \
             ARCH=arm64 \
-            CROSS_COMPILE="$CROSS_COMPILE" \
+            CROSS_COMPILE="$CROSS_COMPILE_PATH" \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             HOSTCC=gcc \
-            HOSTCXX=g++ \
-            > ../build.log 2>&1 || (echo "❌ BUILD CRASHED"; tail -n 100 ../build.log && exit 1)
+            HOSTCXX=g++ 2>&1 | tee ../build.log
 
       - name: 📤 Upload Result
         if: always()
@@ -76,5 +88,5 @@ jobs:
         with:
           name: kernel-build-output
           path: |
-            kernel-source/arch/arm64/boot/Image*
+            kernel-source/out/arch/arm64/boot/Image*
             build.log
