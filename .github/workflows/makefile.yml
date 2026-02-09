@@ -83,9 +83,15 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. Extraction
-          7z x Kernel.zip.001 -y > /dev/null
-          if [ -f "Kernel.zip" ]; then zip -xf Kernel.zip; fi
+          # 1. Extraction (7z handles split files automatically)
+          if [ -f "Kernel.zip.001" ]; then
+            7z x Kernel.zip.001 -y > /dev/null
+          elif [ -f "Kernel.zip" ]; then
+            7z x Kernel.zip -y > /dev/null
+          else
+            echo "❌ No Kernel zip found!" && exit 1
+          fi
+
           # 2. Toolchain Discovery
           ROOT_DIR=$(pwd)
           LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)
