@@ -14,46 +14,33 @@ jobs:
       - name: 1. Initialization
         uses: actions/checkout@v4
 
-      - name: 2. Environment Setup & Space Guard
+      - name: 2. The Quarterback (Setup & Mapping)
         run: |
-          set -e # Stop immediately on error so we see where it died
-          
-          echo "🛰️ Space Guard: Check 'Juice' levels"
-          df -h | grep "/home" || echo "Space check failed but continuing"
-
-          echo "📥 Starting Toolchain Clones..."
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9 || { echo "❌ Clone Aarch64 Failed"; exit 1; }
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9 || { echo "❌ Clone ARM Failed"; exit 1; }
-          git clone --depth=1 https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang || { echo "❌ Clone Clang Failed"; exit 1; }
-          
-          echo "🧹 Stripping .git folders to save juice..."
-          rm -rf aarch64-linux-android-4.9/.git arm-linux-androideabi-4.9/.git clang/.git
-
-          echo "🧩 Joining Kernel parts..."
-          # Check if parts actually exist before cat-ing
-          if ls Kernel.tar.gz.* 1> /dev/null 2>&1; then
-            cat Kernel.tar.gz.* > Full_Kernel.zip
-            echo "✅ Joined: $(ls -lh Full_Kernel.zip)"
-          else
-            echo "⚠️ No split parts found. Looking for single file..."
-            if [ -f Kernel.tar.gz ]; then
-               mv Kernel.tar.gz Full_Kernel.zip
-            else
-               echo "❌ CRITICAL: No kernel file found at all!"
-               ls -R
-               exit 1
-            fi
-          fi
-
-          echo "🔓 Starting Extraction..."
-          mkdir -p kernel-source
-          7z x Full_Kernel.zip -okernel-source/ -y > /dev/null || echo "Extraction warning (Code 123?), checking contents anyway..."
-          
-          echo "📊 Space after extraction:"
+          # 1. Space Check & Clones
           df -h | grep "/home"
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
+          git clone --depth=1 https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
+          
+          # 2. Extract and Flatten
+          [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.* > Full_Kernel.zip
+          mkdir -p kernel-source
+          7z x Full_Kernel.zip -okernel-source/ -y > /dev/null
+          
+          # 3. 📢 RELAY: Tell the other steps where the goods are
+          # We find the real root and save it to GITHUB_ENV
+          REAL_ROOT=$(find kernel-source/ -name "Makefile" -print -quit | xargs dirname)
+          echo "K_ROOT=$REAL_ROOT" >> $GITHUB_ENV
+          echo "CLANG_ROOT=$(pwd)/clang/bin" >> $GITHUB_ENV
+          echo "GCC_ROOT=$(pwd)/aarch64-linux-android-4.9/bin" >> $GITHUB_ENV
+          
+          echo "📢 Relay complete. I found the heart at $REAL_ROOT"
 
-      - name: 3. Visibility Check & Permission Grant
+      - name: 3. Visibility Confirmation
         run: |
+          # This step now knows EXACTLY where to go thanks to $K_ROOT
+          cd ${{ env.K_ROOT }}
+          echo "📍 I am now in: $(pwd)"
+          ls -F
           cd kernel-source
           echo "📍 Current Location: $(pwd)"
           if [ -d "arch" ]; then
