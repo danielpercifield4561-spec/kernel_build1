@@ -1,104 +1,117 @@
-    - name: Build kernel
-      run: |
-          # 1. Install dependencies and setup
+name: SM-X210 Kernel Speedrun
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Initialization
+        uses: actions/checkout@v4
+
+      - name: 2. Environment Setup
+        run: |
+          # a. Load config variables
+          echo "KERNEL_CONFIG=${{ github.event.inputs.kernel_config }}" >> $GITHUB_ENV
+          
+          # b. Pull Toolchains
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
+          git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
+          
+          # c. Install Legacy Dependencies
           sudo add-apt-repository 'deb http://azure.archive.ubuntu.com/ubuntu/ focal main universe'
-          sudo apt-get update && sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
+          sudo apt-get update
+          sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
+
+      - name: 3. Source Reconstruction & Extraction
+        run: |
+          # a. Merge split archives
+          cat Kernel.tar.gz.0* > Kernel.tar.gz
+          echo "✅ Rejoined Size: $(du -sh Kernel.tar.gz)"
           
-          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
-          args="ARCH=arm64 LLVM=1 LLVM_IAS=1 CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- CROSS_COMPILE_ARM32=$GITHUB_WORKSPACE/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-"
+          # b. Extract to workspace
+          mkdir -p kernel-source
+          7z x Kernel.tar.gz -okernel-source/
           
-          # 2. Safety Check: Where are we?
-          ls -R $GITHUB_WORKSPACE
-          
-          cd $GITHUB_WORKSPACE/kernel-source
-          
-          # 3. Find the config with a broader search
-          # This looks for the file regardless of the subfolder
-          CONF_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
-          
-          if [ -z "$CONF_PATH" ]; then
-            echo "❌ ERROR: Could not find the defconfig file anywhere!"
-            exit 1
-          fi
-          
-          echo "🚀 Found Config at: $CONF_PATH"
-          
-          # 4. Clean and Force-Feed
-          make mrproper
-          cp "$CONF_PATH" .config
-          
-          # 5. Build
-          make ${args} oldconfig
-          make -j$(nproc --all) ${args}
+          # c. Setup Toolchain Paths
           ROOT_DIR=$(pwd)
           echo "LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)" >> $GITHUB_ENV
           echo "CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)" >> $GITHUB_ENV
-          echo "CROSS_COMPILE_PATH=$ROOT_DIR/aarch64-linux-android-4.9/bin/aarch64-linux-android-" >> $GITHUB_ENV
 
-    - name: 4. Surgical Code Patching
-      run: |
+      - name: 4. Surgical Code Patching
+        run: |
           cd kernel-source
           
-          # a. WALT Patching (Permission & Loop Guard)
+          # a. Robust WALT Patching (Permission & Loop Aware)
           WALT_TRACE_FILE=$(find kernel/sched/walt -name "*trace.h" | head -n 1)
-          if [ ! -z "$WALT_TRACE_FILE" ]; then
-            chmod +w "$WALT_TRACE_FILE"
-            WALT_DIR=$(dirname "$WALT_TRACE_FILE")
-            [ "$(basename $WALT_TRACE_FILE)" != "trace.h" ] && ln -sf "$(basename $WALT_TRACE_FILE)" "$WALT_DIR/trace.h"
-            
-            # b. Forward Declarations Injection
-            printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
-            cat header_fix.txt "$WALT_TRACE_FILE" > trace.tmp && mv trace.tmp "$WALT_TRACE_FILE"
+          chmod +w "$WALT_TRACE_FILE"
+          WALT_DIR=$(dirname "$WALT_TRACE_FILE")
+          
+          # b. Internal Symlink (Circular-reference guard)
+          if [ "$(basename $WALT_TRACE_FILE)" != "trace.h" ]; then
+             ln -sf "$(basename $WALT_TRACE_FILE)" "$WALT_DIR/trace.h"
           fi
           
-          # c. USB Type-C include path fix
+          # c. Forward Declarations
+          printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
+          cat header_fix.txt "$WALT_TRACE_FILE" > trace.tmp && mv trace.tmp "$WALT_TRACE_FILE"
+          
+          # d. USB Type-C include path fix
           TCPC_DIR="drivers/usb/typec/P86801_tcpc"
           if [ -d "$TCPC_DIR" ]; then
              sed -i 's|ccflags-y +=|ccflags-y += -I$(srctree)/$(src)/inc -I$(src)/inc|g' "$TCPC_DIR/Makefile"
           fi
 
-    - name: 5. Marathon Build & Speedrun Tracker
-      run: |
+      - name: 5. Marathon Build & Speedrun Tracker
+        run: |
           cd kernel-source
           
-          # a. Find and Apply Vendor Defconfig
+          # a. Find and Apply Vendor Defconfig (SM-X210 Logic)
           TARGET_PATH=$(find arch/arm64/configs/ -name "*defconfig" | grep -Ei "gta9p|a13|x210" | head -n 1)
           FINAL_CONFIG=$(echo "$TARGET_PATH" | sed 's|arch/arm64/configs/||')
           echo "🚀 Applying Config: $FINAL_CONFIG"
-          yes "" | make ARCH=arm64 CROSS_COMPILE=${{ env.CROSS_COMPILE_PATH }} "$FINAL_CONFIG"
+          yes "" | make ARCH=arm64 CROSS_COMPILE=aarch64-linux-android- "$FINAL_CONFIG"
 
           # b. Start Background Tracker
           while true; do
             COUNT=$(find . -name "*.o" | wc -l)
-            echo "⏱️ [$(date +%H:%M:%S)] Progress: $COUNT files compiled..."
+            echo "⏱️ [$(date +%H:%M:%S)] Speedrun Progress: $COUNT files compiled..."
             sleep 60
           done &
 
           # c. The Main Build Command
           make -j$(nproc) \
                ARCH=arm64 \
-               CROSS_COMPILE=${{ env.CROSS_COMPILE_PATH }} \
-               CC=${{ env.CLANG_PATH }} \
+               CROSS_COMPILE=aarch64-linux-android- \
+               CC=clang \
                CLANG_TRIPLE=aarch64-linux-gnu- \
-               LD=${{ env.LD_PATH }} \
+               LD="$LD_PATH" \
                LLVM=1 \
                KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration -ferror-limit=1"
 
-    - name: 6. Final Package & Upload
-      if: always()
-      run: |
+      - name: 6. Final Package & Upload
+        if: always()
+        run: |
+          # a. Setup AnyKernel3
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git out
+          
+          # b. Locate and move build artifacts
           KERNEL_FILE=$(find kernel-source/arch/arm64/boot/ -name "Image.gz*" | head -n 1)
+          DTBO_FILE=$(find kernel-source/ -name "dtbo.img" | head -n 1)
+          
           if [ -f "$KERNEL_FILE" ]; then
              cp "$KERNEL_FILE" out/
-             echo "✅ Kernel found and moved to package."
+             [ -f "$DTBO_FILE" ] && cp "$DTBO_FILE" out/
           else
-             echo "❌ Build failed to produce an Image.gz"
+             echo "❌ Build Failed: No kernel image found."
+             tail -n 100 build.log || true
              exit 1
           fi
 
-    - name: 7. Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with: 
-      name: SM-X210-Kernel
-     path: out/* 
+      - name: 7. Upload Flashable Zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: SM-X210-Kernel-Speedrun
+          path: out/*
