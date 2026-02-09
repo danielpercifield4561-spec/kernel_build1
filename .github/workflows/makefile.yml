@@ -30,8 +30,20 @@ jobs:
         run: |
           [ -f Kernel.tar.gz.001 ] && cat Kernel.tar.gz.0* > Kernel.tar.gz
           mkdir -p kernel-source
+          # Extracting (handling the fact that it's a zip renamed to tar.gz)
           7z x Kernel.tar.gz -okernel-source/ -y
-          ls -F kernel-source/
+          
+          # 🔍 THE FIX: Move files up if they are nested inside a subfolder
+          cd kernel-source
+          if [ ! -d "arch" ]; then
+            echo "📂 Files are nested. Moving them to root..."
+            NESTED_DIR=$(find . -maxdepth 2 -name "arch" -type d | rev | cut -d/ -f2- | rev)
+            if [ -n "$NESTED_DIR" ]; then
+              mv "$NESTED_DIR"/* . 2>/dev/null || true
+            fi
+          fi
+          ls -F # Verify 'arch' is now visible here
+
 
       - name: 4. Surgical Code Patching
         run: |
@@ -49,6 +61,14 @@ jobs:
       - name: 5. Marathon Build
         run: |
           cd kernel-source
+          # Search for the config file everywhere in the current directory
+          REAL_CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+          # Strip the leading ./ and arch/arm64/configs/ to make it 'vendor/...'
+          FINAL_CONFIG=$(echo "$REAL_CONFIG_PATH" | sed 's|.*/configs/||')
+          
+          echo "🚀 Found config at: $FINAL_CONFIG"
+          yes "" | make ARCH=arm64 CROSS_COMPILE=../aarch64-linux-android-4.9/bin/aarch64-linux-android- "$FINAL_CONFIG"
+
           LD_PATH=$(find ../aarch64-linux-android-4.9 -name "aarch64-linux-android-ld" | head -n 1)
           CLANG_PATH=$(find ../clang -name "clang" -type f | grep "bin/clang" | head -n 1)
           
