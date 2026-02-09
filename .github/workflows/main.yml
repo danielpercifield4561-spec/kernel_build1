@@ -1,119 +1,65 @@
-name: DLP
+name: Android Kernel CI
 
 on:
-    workflow_dispatch:
-
-# 🌎 GLOBAL HOOK: Every step now has the Gemini Key
-env:
-  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  workflow_dispatch:
 
 jobs:
-  build-kernel:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Setup environment
+      - name: 🧹 Maximize Build Space
         run: |
-          # Use = for everything to match your config.env
-          echo "ANYKERNEL_SOURCE=$(grep -w "ANYKERNEL_SOURCE" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
-          echo "ANYKERNEL_SOURCE_BRANCH=$(grep -w "ANYKERNEL_SOURCE_BRANCH" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
-          echo "KERNEL_SOURCE=$(grep -w "KERNEL_SOURCE" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
-          echo "KERNEL_SOURCE_BRANCH=$(grep -w "KERNEL_SOURCE_BRANCH" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
-          echo "KERNEL_CONFIG=$(grep -w "KERNEL_CONFIG" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
-          echo "BUILD_ARGS=$(grep -w "BUILD_ARGS" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
-   
-      - name: Pull toolchain
-        run: |
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
-          git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
-        
-      - name: Reconstruct and Prepare Source
-        run: |
-          # 1. Join the pieces
-          echo "🔗 Rejoining Kernel pieces..."
-          cat Kernel.zip.0* > Kernel.zip
-          
-          # 2. DELETE THE PIECES IMMEDIATELY to free up space
-          rm Kernel.zip.0*
-          echo "✅ Pieces deleted to save space."
-          
-          # 3. Check the joined file
-          if [ ! -f "Kernel.zip" ]; then
-            echo "❌ ERROR: Kernel.zip missing!"
-            exit 1
-          fi
-          echo "✅ Kernel.zip rejoined. Size: $(du -sh Kernel.zip)"
+          sudo docker image prune -a -f
+          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
+          echo "✅ Disk space cleared for tablet-friendly run."
 
-          # 4. Extract directly into the workspace
-          echo "📦 Extracting source (this may take a moment)..."
-          mkdir -p kernel-source
-          7z x Kernel.zip -okernel-source/ > /dev/null
-          
-          # 5. DELETE THE BIG ZIP IMMEDIATELY after extraction
-          rm Kernel.zip
-          echo "✅ Extraction complete, zip removed."
-
-          # 6. Place the config
-          mkdir -p kernel-source/arch/arm64/configs/vendor/
-          cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
-          
-          echo "📊 Final Disk Space Check:"
-          df -h .
-     
-      - name: Install Legacy Dependencies
+      - name: 🛠️ Set Up Build Environment
         run: |
-          # Add the Ubuntu 20.04 (Focal) repository for legacy libs
-          sudo add-apt-repository 'deb http://azure.archive.ubuntu.com/ubuntu/ focal main universe'
           sudo apt-get update
-          
-          # Install the specific versions needed by older Clang
-          sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
-    
-      - name: Download & Clean Toolchain
-        run: |
-          # 1. Create directory and move in immediately
-          mkdir -p toolchain && cd toolchain
-          
-          echo "📥 Downloading Linaro GCC..."
-          wget -q https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
-          
-          echo "📦 Extracting and removing archive to save space..."
-          tar -xf *.tar.xz --strip-components=1 && rm *.tar.xz
-          
-          # Set the path for the rest of the job
-          echo "TOOLCHAIN_PATH=$(pwd)/bin" >> $GITHUB_ENV
-          echo "✅ Toolchain ready. Remaining Disk Space: $(df -h . | awk 'NR==2 {print $4}')"
+          sudo apt-get install -y bc build-essential zip curl libstdc++6 git wget 7zip python3
+          # Clang and GCC toolchains (LineageOS versions are faster to clone)
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-4691093 clang
 
-   
-      - name: Install LLVM and Clang
+      - name: 📦 Reconstruct and Merge Source
         run: |
-            sudo apt-get update
-            sudo apt-get install -y clang llvm lld
-  
-      - name: Compile Kernel
-        run: |
-          # 1. Enter the source folder
-          cd kernel-source || { echo "❌ Folder 'kernel-source' not found!"; exit 1; }
+          echo "🔗 Combining Kernel and Platform pieces..."
+          cat Kernel.zip/Kernel.zip.0* > Combined_Kernel.zip
+          cat Platform.zip/Platform.zip.0* > Combined_Platform.zip
           
-          # 2. TOOLCHAIN SETUP
+          mkdir -p kernel-source
+          echo "📦 Extracting Kernel..."
+          7z x Combined_Kernel.zip -okernel-source/
+          
+          echo "📦 Merging Platform into source..."
+          7z x Combined_Platform.zip -aoa -okernel-source/
+          
+          # Massive cleanup to prevent "Angry Unicorn" timeouts
+          rm Combined_Kernel.zip Combined_Platform.zip
+          echo "✅ Full source tree merged."
+
+      - name: ⚙️ Compile Kernel
+        run: |
+          cd kernel-source || { echo "❌ Source not found!"; exit 1; }
+          
+          # TOOLCHAIN SETUP
           ROOT_DIR=$GITHUB_WORKSPACE
           export ARCH=arm64
           export CROSS_COMPILE="$ROOT_DIR/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
           export PATH="$ROOT_DIR/clang/bin:$ROOT_DIR/aarch64-linux-android-4.9/bin:$PATH"
 
-          # 3. FORCE-FEED CONFIG
+          # FORCE CONFIG
           FIND_CONFIG=$(find $GITHUB_WORKSPACE -name "gta9pwifi_eur_open_defconfig" | head -n 1)
           cp "$FIND_CONFIG" .config
-          echo "✅ Config force-fed to .config"
-
-          # 4. REFRESH CONFIG (Legacy Style)
-          echo "⚙️ Refreshing config via legacy oldconfig..."
-          # yes "" | make oldconfig fills in any missing config options with defaults
+          
+          # LEGACY REFRESH (The "yes" trick for old kernels)
+          echo "⚙️ Refreshing config (Legacy style)..."
           yes "" | make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" oldconfig
 
-          # 5. START THE BUILD
+          # START BUILD
           echo "🔥 Starting Build..."
           make -j$(nproc) \
             ARCH=arm64 \
@@ -124,66 +70,11 @@ jobs:
             HOSTCXX=g++ \
             > ../build.log 2>&1 || (echo "❌ BUILD CRASHED"; tail -n 100 ../build.log && exit 1)
 
-           # 6. VERIFY OUTPUT (Checking for any Image file)
-           echo "🔍 Searching for kernel image..."
-           IMAGE=$(find arch/arm64/boot/ -name "Image*" -type f | head -n 1)
-           if [ -z "$IMAGE" ]; then
-             echo "❌ No kernel image found in arch/arm64/boot/"
-             exit 1
-           else
-             echo "✅ KERNEL CREATED: $IMAGE"
-             mkdir -p ../final_output
-             cp "$IMAGE" ../final_output/
-           fi
-
-             
-      - name: Final Package and Upload
-        run: |
-           # 1. Setup AnyKernel3
-           [ -d "AnyKernel3" ] || git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
-           mkdir -p out
-           cp -r AnyKernel3/* out/
-           # 2. Search EVERYWHERE for the kernel image
-           echo "Searching for kernel files..."
-           # This looks for files named 'Image' or 'Image.gz' in the entire workspace
-           KERNEL_FILE=$(find . -type f -name "Image" -o -name "Image.gz" | head -n 1)
-           DTBO_FILE=$(find . -type f -name "dtbo.img" | head -n 1)
-           if [ -z "$KERNEL_FILE" ]; then
-           echo "❌ ERROR: No kernel image found! Check your build logs for compilation errors."
-           exit 1
-           else
-           echo "✅ Found kernel at: $KERNEL_FILE"
-           cp "$KERNEL_FILE" out/
-           [ -f "$DTBO_FILE" ] && cp "$DTBO_FILE" out/ && echo "✅ Found DTBO at: $DTBO_FILE"
-           fi
-           #3. Final check 
-           li -lh out/
-      - name: Upload Flashable Zip
+      - name: 📤 Upload Result
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-         name: Flashable_Kernel_Zip
-         path: out/*
-
-      - name: 🤖 AI Debugger Hook
-        if: failure()
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: |
-          echo "🔍 Gathering diagnostic data..."
-          
-          # Check if build.log exists, otherwise grab the 'ls' output
-          if [ -f "build.log" ]; then
-            LOG_DATA=$(tail -n 50 build.log)
-          else
-            LOG_DATA="Build log not found. Current Directory State: $(ls -F)"
-          fi
-          
-          # Send to Gemini
-          curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$GEMINI_API_KEY" \
-          -H 'Content-Type: application/json' \
-          -d "{
-            \"contents\": [{
-              \"parts\":[{\"text\": \"The GitHub Action failed. Context: $LOG_DATA. What is the pathing error?\"}]
-            }]
-          }" | jq '.candidates[0].content.parts[0].text'
-
+          name: kernel-build-output
+          path: |
+            kernel-source/arch/arm64/boot/Image*
+            build.log
