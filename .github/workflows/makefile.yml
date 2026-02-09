@@ -50,6 +50,7 @@ jobs:
           mkdir -p kernel-source/arch/arm64/configs/vendor/
           cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
           echo "✅ Config placed in vendor folder."
+     
       - name: Install Legacy Dependencies
         run: |
           # Add the Ubuntu 20.04 (Focal) repository for legacy libs
@@ -75,26 +76,29 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. ENTER THE WORKSPACE
-          # You already extracted things to 'kernel-source' in Step 5
+          # 1. Enter the source folder
           cd kernel-source
           
-          # 2. TOOLCHAIN MAPPING (Pointing back to the root)
+          # 2. FORCE the config into the standard location
+          # We search for it first to make sure we have the right one
+          CONFIG_FILE=$(find .. -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+          mkdir -p arch/arm64/configs/
+          cp "$CONFIG_FILE" arch/arm64/configs/gta9pwifi_defconfig
+          
+          # 3. TOOLCHAIN MAPPING
           ROOT_DIR=$GITHUB_WORKSPACE
           GCC64="$ROOT_DIR/aarch64-linux-android-4.9/bin"
           CLANG="$ROOT_DIR/clang/bin"
-          
           export ARCH=arm64
           export CROSS_COMPILE="$GCC64/aarch64-linux-android-"
           export PATH="$CLANG:$GCC64:$PATH"
 
-          # 3. CONFIG LOAD
-          # We use the config we placed in Step 5
+          # 4. LOAD CONFIG (Simplified name)
           echo "⚙️ Loading Config..."
-          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" vendor/gta9pwifi_eur_open_defconfig
+          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" gta9pwifi_defconfig
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
 
-          # 4. START THE BUILD
+          # 5. START THE BUILD
           echo "🔥 Starting Build..."
           make -j$(nproc) \
             ARCH=arm64 \
@@ -104,6 +108,7 @@ jobs:
             HOSTCC=gcc \
             HOSTCXX=g++ \
             > ../build.log 2>&1 || (tail -n 100 ../build.log && exit 1)
+
 
           
            # 6. THE AUTO-DETECTION
