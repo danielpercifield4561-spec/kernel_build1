@@ -140,22 +140,24 @@ jobs:
           head -n 10 "$WALT_TRACE_FILE"
 
        
-          # 4. Load Config
-          cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
-          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
+          # 4. USB TYPE-C DRIVER PATCH
+          echo "🩹 Fixing USB Type-C include paths..."
+          # This tells the TCPC driver to look inside its own 'inc' folder
+          TCPC_DIR="drivers/usb/typec/P86801_tcpc"
+          if [ -d "$TCPC_DIR" ]; then
+            sed -i 's|ccflags-y +=|ccflags-y += -I$(srctree)/$(src)/inc -I$(src)/inc|g' "$TCPC_DIR/Makefile"
+            echo "✅ Patched TCPC Makefile"
+           fi
 
-          # 5. THE CLEAN MARATHON BUILD
-          echo "🔥 Starting the isolated build..."
-          make -j1 \
+           # 5. THE MARATHON BUILD
+           echo "🔥 Starting the build..."
+           make -j1 \
              ARCH=arm64 \
              CROSS_COMPILE="$CROSS_COMPILE" \
              CC=clang \
              CLANG_TRIPLE=aarch64-linux-gnu- \
              LD="$LD_PATH" \
-             HOSTCC=gcc \
-             HOSTCXX=g++ \
              LLVM=1 \
-             LLVM_IAS=0 \
              KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration -ferror-limit=1"
          
           # 6. THE AUTO-DETECTION
