@@ -31,25 +31,36 @@ jobs:
         
       - name: Reconstruct and Prepare Source
         run: |
-          # 1. Join the .01, .02 pieces into one file
-          # Using 0* handles .01, .02... through .09 correctly
+          # 1. Join the pieces
+          echo "🔗 Rejoining Kernel pieces..."
           cat Kernel.zip.0* > Kernel.zip
-        
-          # 2. Check if the join worked
+          
+          # 2. DELETE THE PIECES IMMEDIATELY to free up space
+          rm Kernel.zip.0*
+          echo "✅ Pieces deleted to save space."
+          
+          # 3. Check the joined file
           if [ ! -f "Kernel.zip" ]; then
-            echo "❌ ERROR: Kernel.tar.gz still missing after join attempt!"
-            ls -R
-           exit 1
+            echo "❌ ERROR: Kernel.zip missing!"
+            exit 1
           fi
           echo "✅ Kernel.zip rejoined. Size: $(du -sh Kernel.zip)"
-          # 3. Extract it
+
+          # 4. Extract directly into the workspace
+          echo "📦 Extracting source (this may take a moment)..."
           mkdir -p kernel-source
-          7z x Kernel.zip -okernel-source/
-        
-          # 4. Place your config file (Now that source folder exists)
+          7z x Kernel.zip -okernel-source/ > /dev/null
+          
+          # 5. DELETE THE BIG ZIP IMMEDIATELY after extraction
+          rm Kernel.zip
+          echo "✅ Extraction complete, zip removed."
+
+          # 6. Place the config
           mkdir -p kernel-source/arch/arm64/configs/vendor/
           cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
-          echo "✅ Config placed in vendor folder."
+          
+          echo "📊 Final Disk Space Check:"
+          df -h .
      
       - name: Install Legacy Dependencies
         run: |
@@ -60,14 +71,21 @@ jobs:
           # Install the specific versions needed by older Clang
           sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
     
-      - name: Download Toolchain
+      - name: Download & Clean Toolchain
         run: |
-          mkdir -p toolchain
-          cd toolchain
-          # Download a stable AArch64 GCC toolchain
+          # 1. Create directory and move in immediately
+          mkdir -p toolchain && cd toolchain
+          
+          echo "📥 Downloading Linaro GCC..."
           wget -q https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
-          tar -xf *.tar.xz --strip-components=1
+          
+          echo "📦 Extracting and removing archive to save space..."
+          tar -xf *.tar.xz --strip-components=1 && rm *.tar.xz
+          
+          # Set the path for the rest of the job
           echo "TOOLCHAIN_PATH=$(pwd)/bin" >> $GITHUB_ENV
+          echo "✅ Toolchain ready. Remaining Disk Space: $(df -h . | awk 'NR==2 {print $4}')"
+
    
       - name: Install LLVM and Clang
         run: |
