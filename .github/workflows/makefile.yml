@@ -27,32 +27,30 @@ jobs:
 
       - name: 3. Source Reconstruction & Extraction
         run: |
-          # a. Merge split archives
           cat Kernel.tar.gz.0* > Kernel.tar.gz
-          echo "✅ Rejoined Size: $(du -sh Kernel.tar.gz)"
-          
-          # b. Extract to workspace
+          mkdir -p temp_extra
+          7z x Kernel.tar.gz -otemp_extra/
+        
+          # Move files up if they are trapped in a subfolder
           mkdir -p kernel-source
-          7z x Kernel.tar.gz -okernel-source/
-          
-          # c. Setup Toolchain Paths
-          ROOT_DIR=$(pwd)
-          echo "LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)" >> $GITHUB_ENV
-          echo "CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)" >> $GITHUB_ENV
+          SUBDIR=$(find temp_extra -maxdepth 2 -name "Makefile" -exec dirname {} \;)
+          mv $SUBDIR/* kernel-source/
+          echo "✅ Source extracted and flattened to kernel-source/"
 
       - name: 4. Surgical Code Patching
         run: |
           cd kernel-source
-          
-          # a. Robust WALT Patching (Permission & Loop Aware)
-          WALT_TRACE_FILE=$(find kernel/sched/walt -name "*trace.h" | head -n 1)
-          chmod +w "$WALT_TRACE_FILE"
-          WALT_DIR=$(dirname "$WALT_TRACE_FILE")
-          
-          # b. Internal Symlink (Circular-reference guard)
-          if [ "$(basename $WALT_TRACE_FILE)" != "trace.h" ]; then
-             ln -sf "$(basename $WALT_TRACE_FILE)" "$WALT_DIR/trace.h"
+          # Use 'find' to locate walt.h regardless of exact path
+          WALT_TRACE_FILE=$(find . -name "trace.h" | grep "sched/walt" | head -n 1)
+        
+          if [ -n "$WALT_TRACE_FILE" ]; then
+            echo "Found WALT trace at: $WALT_TRACE_FILE"
+              chmod +w "$WALT_TRACE_FILE"
+            # Proceed with your printf/cat patching here...
+          else
+            echo "⚠️ WALT trace not found, skipping patch."
           fi
+
           
           # c. Forward Declarations
           printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
@@ -62,9 +60,12 @@ jobs:
           TCPC_DIR="drivers/usb/typec/P86801_tcpc"
           if [ -d "$TCPC_DIR" ]; then
              sed -i 's|ccflags-y +=|ccflags-y += -I$(srctree)/$(src)/inc -I$(src)/inc|g' "$TCPC_DIR/Makefile"
+    
       - name: 5. Marathon Build & Speedrun Tracker
         run: |
           cd kernel-source
+          # ... (arch/arm64/configs/vendor) ...
+          make -j$(nproc --all) ${{ env.BUILD_ARGS }} 2>&1 | tee ../build.log
 
           # 1. Broad Search: Find the config anywhere in the configs folder
           # We look for anything that looks like your device (gta9p or x210)
@@ -98,20 +99,16 @@ jobs:
       - name: 6. Final Package & Upload
         if: always()
         run: |
-          # a. Setup AnyKernel3
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git out
-          
-          # b. Locate and move build artifacts
-          KERNEL_FILE=$(find kernel-source/arch/arm64/boot/ -name "Image.gz*" | head -n 1)
-          DTBO_FILE=$(find kernel-source/ -name "dtbo.img" | head -n 1)
-          
+          # Search for the image anywhere in the build tree
+          KERNEL_FILE=$(find kernel-source/arch/arm64/boot -name "Image.gz*" | head -n 1)
           if [ -f "$KERNEL_FILE" ]; then
-             cp "$KERNEL_FILE" out/
-             [ -f "$DTBO_FILE" ] && cp "$DTBO_FILE" out/
+            mkdir -p out
+            cp "$KERNEL_FILE" out/
+            echo "✅ Kernel found and staged."
           else
-             echo "❌ Build Failed: No kernel image found."
-             tail -n 100 build.log || true
-             exit 1
+            echo "❌ Build Failed: No kernel image found."
+            tail -n 100 build.log || true
+            exit 1
           fi
 
       - name: 7. Upload Flashable Zip
