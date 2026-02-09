@@ -83,30 +83,37 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. Extraction (7z handles split files automatically)
-          if [ -f "Kernel.zip.001" ]; then
-            7z x Kernel.zip.001 -y > /dev/null
-          elif [ -f "Kernel.zip" ]; then
-            7z x Kernel.zip -y > /dev/null
-          else
-            echo "❌ No Kernel zip found!" && exit 1
-          fi
+          # 1. Extraction (Already solid)
+          7z x Kernel.zip.001 -y > /dev/null
 
-          # 2. Toolchain Discovery
-          ROOT_DIR=$(pwd)
+          # 🆕 THE RELAY: Find where the Makefile actually lives
+          SOURCE_ROOT=$(find . -name "Makefile" -print -quit | xargs dirname)
+          cd "$SOURCE_ROOT"
+          echo "🎯 Working directory switched to: $(pwd)"
+
+          # 2. Toolchain Discovery (Better search)
+          ROOT_DIR=$GITHUB_WORKSPACE
           LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)
           CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)
           CROSS_DIR=$(dirname "$LD_PATH")
-           export ARCH=arm64
+          
+          export ARCH=arm64
           export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
           export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
-          # 3. WALT & Header Fixes
-          ln -sf kernel/sched/walt/trace.h trace.h
-          find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
+
+          # 3. WALT Fix (Only runs if the folder exists)
+          if [ -d "kernel/sched/walt" ]; then
+            ln -sf kernel/sched/walt/trace.h trace.h
+            find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
+          else
+            echo "⚠️ WALT folder not found, skipping specific fix..."
+          fi
+
           # 4. Load Config
           cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
           make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
-                  # 5. THE DIAGNOSTIC BUILD
+         
+          # 5. THE DIAGNOSTIC BUILD
           echo "🔥 Starting the compilation..."
           echo "Writing logs to build.log to prevent pipe crashes..."
         
@@ -122,15 +129,16 @@ jobs:
              LLVM_IAS=0 \
              KCFLAGS="-Wno-error -fno-integrated-as -ferror-limit=0 -g0 -w -I$(pwd)" \
              > build.log 2>&1 || touch build_failed.txt
-          # 6. THE AUTO-DETECTION
-          if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
-          echo "❌ Build failed. Here are the last 100 lines of the log:"
-          tail -n 100 build.log
-          exit 1
-          else
-          echo "✅ KERNEL CREATED SUCCESSFULLY!"
-          mkdir -p final_output
-          cp arch/arm64/boot/Image.gz-dtb final_output/
+          
+           # 6. THE AUTO-DETECTION
+           if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
+           echo "❌ Build failed. Here are the last 100 lines of the log:"
+           tail -n 100 build.log
+           exit 1
+           else
+           echo "✅ KERNEL CREATED SUCCESSFULLY!"
+           mkdir -p final_output
+           cp arch/arm64/boot/Image.gz-dtb final_output/
           fi
   
       
