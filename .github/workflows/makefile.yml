@@ -1,7 +1,7 @@
-name: DLP Build
+name: DLP
 
 on:
-  workflow_dispatch:
+    workflow_dispatch:
 
 # 🌎 GLOBAL HOOK: Every step now has the Gemini Key
 env:
@@ -11,136 +11,153 @@ jobs:
   build-kernel:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4  # <--- THIS IS THE "DOWNLOAD" BUTTON
+      - uses: actions/checkout@v4
 
-      - name: 1. File Integrity Check
+      - name: Setup environment
         run: |
-          echo "🛡️ Verifying File Fingerprints..."
-          md5sum Kernel.zip.* || echo "⚠️ Files not found yet"
-          
-          # Check if the parts are actually the same size
-          ls -lh Kernel.zip.*
-
-
-      - name: 2. The Quarterback (Setup & Mapping)
+          # Use = for everything to match your config.env
+          echo "ANYKERNEL_SOURCE=$(grep -w "ANYKERNEL_SOURCE" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+          echo "ANYKERNEL_SOURCE_BRANCH=$(grep -w "ANYKERNEL_SOURCE_BRANCH" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+          echo "KERNEL_SOURCE=$(grep -w "KERNEL_SOURCE" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+          echo "KERNEL_SOURCE_BRANCH=$(grep -w "KERNEL_SOURCE_BRANCH" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+          echo "KERNEL_CONFIG=$(grep -w "KERNEL_CONFIG" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+          echo "BUILD_ARGS=$(grep -w "BUILD_ARGS" config.env | cut -d "=" -f 2 | tr -d '\r' | tr -d '[:space:]')" >> $GITHUB_ENV
+   
+      - name: Pull toolchain
         run: |
-          # 1. Space Check & Clones
-          df -h | grep "/home"
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
-          git clone --depth=1 https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
-          
-          # 2. Extract and Flatten
-          [ -f Kernel.zip.001 ] && cat Kernel.zip.* > Full_Kernel.zip
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 arm-linux-androideabi-4.9
+          git clone https://github.com/xiangfeidexiaohuo/Snapdragon-LLVM.git clang
+      - name: Rejoin Kernel Parts
+        run: |
+          # This takes Kernel.tar.gz.01, .02, etc. and merges them
+          # The '?' or '*' wildcard ensures they stay in numerical order
+          cat Kernel.tar.gz.0* > Kernel.tar.gz
+        
+          # Verify the file now exists and show its size
+          ls -lh Kernel.tar.gz
+        
+      - name: Reconstruct and Prepare Source
+        run: |
+          # 1. Join the .01, .02 pieces into one file
+          # Using 0* handles .01, .02... through .09 correctly
+          cat Kernel.tar.gz.0* > Kernel.tar.gz
+        
+          # 2. Check if the join worked
+          if [ ! -f "Kernel.tar.gz" ]; then
+            echo "❌ ERROR: Kernel.tar.gz still missing after join attempt!"
+            ls -R
+           exit 1
+          fi
+          echo "✅ Kernel.tar.gz rejoined. Size: $(du -sh Kernel.tar.gz)"
+          # 3. Extract it
           mkdir -p kernel-source
-          7z x Full_Kernel.zip -okernel-source/ -y > /dev/null
-          
-          # 3. 📢 RELAY: Tell the other steps where the goods are
-          # We find the real root and save it to GITHUB_ENV
-          REAL_ROOT=$(find kernel-source/ -name "Makefile" -print -quit | xargs dirname)
-          echo "K_ROOT=$REAL_ROOT" >> $GITHUB_ENV
-          echo "CLANG_ROOT=$(pwd)/clang/bin" >> $GITHUB_ENV
-          echo "GCC_ROOT=$(pwd)/aarch64-linux-android-4.9/bin" >> $GITHUB_ENV
-          
-          echo "📢 Relay complete. I found the heart at $REAL_ROOT"
-
-      - name: 3. Visibility Confirmation
+          7z x Kernel.tar.gz -okernel-source/
+        
+          # 4. Place your config file (Now that source folder exists)
+          mkdir -p kernel-source/arch/arm64/configs/vendor/
+          cp gta9pwifi_eur_open_defconfig kernel-source/arch/arm64/configs/vendor/
+          echo "✅ Config placed in vendor folder."
+      - name: Install Legacy Dependencies
         run: |
-          # This step now knows EXACTLY where to go thanks to $K_ROOT
-          cd ${{ env.K_ROOT }}
-          echo "📍 I am now in: $(pwd)"
-          ls -F
-          cd kernel-source
-          echo "📍 Current Location: $(pwd)"
-          if [ -d "arch" ]; then
-            echo "✅ WOWZA! Arch folder found and visible."
-            chmod -R 777 . # Give the 'wrists' full control
-            ls -F
+          # Add the Ubuntu 20.04 (Focal) repository for legacy libs
+          sudo add-apt-repository 'deb http://azure.archive.ubuntu.com/ubuntu/ focal main universe'
+          sudo apt-get update
+          
+          # Install the specific versions needed by older Clang
+          sudo apt-get install -y libtinfo5 libncurses5 libssl-dev
+    
+      - name: Download Toolchain
+        run: |
+          mkdir -p toolchain
+          cd toolchain
+          # Download a stable AArch64 GCC toolchain
+          wget -q https://releases.linaro.org/components/toolchain/binaries/latest-7/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
+          tar -xf *.tar.xz --strip-components=1
+          echo "TOOLCHAIN_PATH=$(pwd)/bin" >> $GITHUB_ENV
+   
+      - name: Install LLVM and Clang
+        run: |
+            sudo apt-get update
+            sudo apt-get install -y clang llvm lld
+  
+      - name: Compile Kernel
+        run: |
+          # 1. Extraction
+          7z x Kernel.tar.gz.001 -y > /dev/null
+          if [ -f "Kernel.tar.gz" ]; then tar -xf Kernel.tar.gz; fi
+          # 2. Toolchain Discovery
+          ROOT_DIR=$(pwd)
+          LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)
+          CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)
+          CROSS_DIR=$(dirname "$LD_PATH")
+           export ARCH=arm64
+          export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
+          export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
+          # 3. WALT & Header Fixes
+          ln -sf kernel/sched/walt/trace.h trace.h
+          find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
+          # 4. Load Config
+          cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
+          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
+                  # 5. THE DIAGNOSTIC BUILD
+          echo "🔥 Starting the compilation..."
+          echo "Writing logs to build.log to prevent pipe crashes..."
+        
+          make -j2 \
+             ARCH=arm64 \
+             CROSS_COMPILE="$CROSS_COMPILE" \
+             CC=clang \
+             CLANG_TRIPLE=aarch64-linux-gnu- \
+             LD="$LD_PATH" \
+             HOSTCC=gcc \
+             HOSTCXX=g++ \
+             LLVM=1 \
+             LLVM_IAS=0 \
+             KCFLAGS="-Wno-error -fno-integrated-as -ferror-limit=0 -g0 -w -I$(pwd)" \
+             > build.log 2>&1 || touch build_failed.txt
+          # 6. THE AUTO-DETECTION
+          if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
+          echo "❌ Build failed. Here are the last 100 lines of the log:"
+          tail -n 100 build.log
+          exit 1
           else
-            echo "❌ Still hidden. Listing Step 2 output:"
-            ls -R .. | head -n 50
-            exit 1
+          echo "✅ KERNEL CREATED SUCCESSFULLY!"
+          mkdir -p final_output
+          cp arch/arm64/boot/Image.gz-dtb final_output/
           fi
+  
+      
 
-          # 3. 🏗️ Structural Leveling
-          # Get the folder containing the Makefile
-          SRC_DIR=$(dirname "$REAL_PATH")
-          echo "🎯 Heart found at: $SRC_DIR"
-          
-          # Move everything from the 'Heart' to the 'kernel-source' root
-          mv "$SRC_DIR"/* kernel-source/ 2>/dev/null || true
-          cd kernel-source
-          
-          echo "✅ Visibility Check (Should see arch/):"
-          ls -F
 
-      - name: 4. Surgical Code Patching
+             
+      - name: Final Package and Upload
         run: |
-          cd kernel-source
-          WALT_TRACE_FILE=$(find . -name "trace.h" | grep "walt" | head -n 1)
-          if [ -n "$WALT_TRACE_FILE" ]; then
-            chmod +w "$WALT_TRACE_FILE"
-            printf "struct rq;\nstruct group_cpu_time;\nstruct walt_related_thread_group;\n#ifndef MAX_CLUSTERS\n#define MAX_CLUSTERS 3\n#endif\n#include <linux/types.h>\n" > header_fix.txt
-            cat header_fix.txt "$WALT_TRACE_FILE" > trace.tmp && mv trace.tmp "$WALT_TRACE_FILE"
-            echo "✅ WALT Patched at $WALT_TRACE_FILE"
-          else
-            echo "⚠️ WALT trace not found, skipping patch."
-          fi
-
-      - name: 5. Marathon Build
-        run: |
-          cd kernel-source
-          # Search for the config file everywhere in the current directory
-          REAL_CONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" | head -n 1)
-          # Strip the leading ./ and arch/arm64/configs/ to make it 'vendor/...'
-          FINAL_CONFIG=$(echo "$REAL_CONFIG_PATH" | sed 's|.*/configs/||')
-          
-          echo "🚀 Found config at: $FINAL_CONFIG"
-          yes "" | make ARCH=arm64 CROSS_COMPILE=../aarch64-linux-android-4.9/bin/aarch64-linux-android- "$FINAL_CONFIG"
-
-          LD_PATH=$(find ../aarch64-linux-android-4.9 -name "aarch64-linux-android-ld" | head -n 1)
-          CLANG_PATH=$(find ../clang -name "clang" -type f | grep "bin/clang" | head -n 1)
-          
-          # Use find to get the exact relative path for the vendor config
-          TARGET_CONFIG=$(find arch/arm64/configs/ -name "gta9pwifi_eur_open_defconfig" | sed 's|arch/arm64/configs/||')
-          
-          yes "" | make ARCH=arm64 CROSS_COMPILE=../aarch64-linux-android-4.9/bin/aarch64-linux-android- "$TARGET_CONFIG"
-
-          # Run make and log output for the AI to analyze if it fails
-          make -j$(nproc) \
-               ARCH=arm64 \
-               CROSS_COMPILE=../aarch64-linux-android-4.9/bin/aarch64-linux-android- \
-               CC="$CLANG_PATH" \
-               CLANG_TRIPLE=aarch64-linux-gnu- \
-               LD="$LD_PATH" \
-               LLVM=1 \
-               KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration" 2>&1 | tee build_output.log
-
-      - name: 6. 🤖 AI Error Analyzer (Only on Failure)
-        if: failure()
-        run: |
-          echo "🤖 Sending crash logs to Gemini for surgical analysis..."
-          # Grab last 50 lines of the build log
-          ERROR_LOG=$(tail -n 50 kernel-source/build_output.log)
-          
-          # Use npx to call Gemini directly from the shell
-          npx @google/gemini-cli "I am building a kernel for SM-X210. The build failed with this error: $ERROR_LOG. Please provide a specific terminal command or code fix to solve this."
-
-      - name: 7. Final Package & Upload
-        if: always()
+           # 1. Setup AnyKernel3
+           [ -d "AnyKernel3" ] || git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3
+           mkdir -p out
+           cp -r AnyKernel3/* out/
+           # 2. Search EVERYWHERE for the kernel image
+           echo "Searching for kernel files..."
+           # This looks for files named 'Image' or 'Image.gz' in the entire workspace
+           KERNEL_FILE=$(find . -type f -name "Image" -o -name "Image.gz" | head -n 1)
+           DTBO_FILE=$(find . -type f -name "dtbo.img" | head -n 1)
+           if [ -z "$KERNEL_FILE" ]; then
+           echo "❌ ERROR: No kernel image found! Check your build logs for compilation errors."
+           exit 1
+           else
+           echo "✅ Found kernel at: $KERNEL_FILE"
+           cp "$KERNEL_FILE" out/
+           [ -f "$DTBO_FILE" ] && cp "$DTBO_FILE" out/ && echo "✅ Found DTBO at: $DTBO_FILE"
+           fi
+           #3. Final check 
+           li -lh out/
+      - name: Upload Flashable Zip
         uses: actions/upload-artifact@v4
         with:
-          name: SM-X210-Result
-          path: |
-            kernel-source/arch/arm64/boot/Image.gz*
-            kernel-source/build_output.log
-               CROSS_COMPILE=../aarch64-linux-android-4.9/bin/aarch64-linux-android- \
-               CC="$CLANG_PATH" \
-               CLANG_TRIPLE=aarch64-linux-gnu- \
-               LD="$LD_PATH" \
-               LLVM=1 \
-               KCFLAGS="-Wno-error -fno-integrated-as -Wno-implicit-function-declaration"
-                     
+         name: Flashable_Kernel_Zip
+         path: out/*
+
       - name: 🤖 AI Debugger Hook
         if: failure()
         env:
@@ -158,4 +175,3 @@ jobs:
               \"parts\":[{\"text\": \"The kernel build failed with this log: $LOG_DATA. What is the exact fix?\"}]
             }]
           }" | jq '.candidates[0].content.parts[0].text'
-
