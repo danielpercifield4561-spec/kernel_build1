@@ -35,11 +35,10 @@ jobs:
       - name: 📦 Reconstruct and Merge Source
         run: |
           echo "🔗 Combining Kernel pieces..."
-          # Check if source directories exist before cat
           if [ -d "Kernel.zip" ]; then
             cat Kernel.zip/Kernel.zip.0* > Combined_Kernel.zip
           else
-            echo "❌ Kernel.zip folder not found! Check your repo structure." && exit 1
+            echo "❌ Kernel.zip folder not found!"; ls -R; exit 1
           fi
           
           if [ -d "Platform.zip" ]; then
@@ -50,29 +49,21 @@ jobs:
           7z x Combined_Kernel.zip -okernel-source/
           7z x Combined_Platform.zip -aoa -okernel-source/
           
-          rm Combined_Kernel.zip Combined_Platform.zip
-          echo "✅ Source tree merged."
+          # DELETE THE FOLDERS to free up RAM/Disk for the compiler
+          rm -rf Kernel.zip Platform.zip Combined_Kernel.zip Combined_Platform.zip
+          echo "✅ Source tree merged and space cleaned."
 
       - name: ⚙️ Compile Kernel
         run: |
           cd kernel-source
-          
-          # Dynamic toolchain pathing
           CROSS_COMPILE_PATH="$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
           
-          # FIND CONFIG (More robust)
           DEFCONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" -type f | head -n 1)
-          if [ -z "$DEFCONFIG_PATH" ]; then
-             echo "❌ Could not find gta9pwifi_eur_open_defconfig in source tree!"
-             find . -name "*defconfig" | head -n 20
-             exit 1
-          fi
-          
           cp "$DEFCONFIG_PATH" arch/arm64/configs/tmp_defconfig
           
-          make O=out ARCH=arm64 tmp_defconfig
+          # Use 'yes' to handle any legacy config prompts automatically
+          yes "" | make O=out ARCH=arm64 tmp_defconfig
           
-          # START BUILD
           echo "🔥 Starting Build..."
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
@@ -80,7 +71,8 @@ jobs:
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             HOSTCC=gcc \
-            HOSTCXX=g++ 2>&1 | tee ../build.log
+            HOSTCXX=g++ > ../build.log 2>&1 || (tail -n 100 ../build.log && exit 1)
+
 
       - name: 📤 Upload Result
         if: always()
