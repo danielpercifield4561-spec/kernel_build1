@@ -27,15 +27,19 @@ jobs:
 
       - name: 3. Source Reconstruction & Extraction
         run: |
-          cat Kernel.tar.gz.0* > Kernel.tar.gz
-          mkdir -p temp_extra
-          7z x Kernel.tar.gz -otemp_extra/
-        
-          # Move files up if they are trapped in a subfolder
+          # a. Merge parts safely
+          if [ -f Kernel.tar.gz.001 ]; then
+            cat Kernel.tar.gz.0* > Kernel.tar.gz
+          fi
+          
+          # b. Extract to a dedicated folder
           mkdir -p kernel-source
-          SUBDIR=$(find temp_extra -maxdepth 2 -name "Makefile" -exec dirname {} \;)
-          mv $SUBDIR/* kernel-source/
-          echo "✅ Source extracted and flattened to kernel-source/"
+          # Use -y to auto-overwrite and keep it contained
+          7z x Kernel.tar.gz -okernel-source/ -y
+          
+          # c. Verify the contents (Let's see what's actually inside)
+          echo "📂 Contents of kernel-source:"
+          ls -F kernel-source/
 
       - name: 4. Surgical Code Patching
         run: |
@@ -62,6 +66,8 @@ jobs:
              sed -i 's|ccflags-y +=|ccflags-y += -I$(srctree)/$(src)/inc -I$(src)/inc|g' "$TCPC_DIR/Makefile"
     
       - name: 5. Marathon Build & Speedrun Tracker
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # <--- This is the "Hook"
         run: |
           cd kernel-source
           # ... (arch/arm64/configs/vendor) ...
