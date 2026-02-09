@@ -85,7 +85,7 @@ jobs:
         run: |
           # 1. Extraction
           7z x Kernel.zip.001 -y > /dev/null
-          if [ -f "Kernel.zip" ]; then tar -xf Kernel.zip; fi
+          if [ -f "Kernel.zip" ]; then zip -xf Kernel.zip; fi
           # 2. Toolchain Discovery
           ROOT_DIR=$(pwd)
           LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)
