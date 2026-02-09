@@ -83,61 +83,42 @@ jobs:
   
       - name: Compile Kernel
         run: |
-          # 1. Extraction
+          # 1. THE EXTRACTION (Force overwrite and join)
+          echo "📦 Extracting source..."
+          # We extract everything into the current folder
           7z x Kernel.zip.001 -y > /dev/null
-
-          # 🆕 THE PRECISION RELAY
-          # We tell find to PRUNE (ignore) the toolchain folder 
-          # so it only looks in the extracted kernel files.
-          SOURCE_ROOT=$(find . -path "./toolchain" -prune -o -name "Makefile" -print -quit | xargs dirname)
+          7z x Platform.zip.001 -y > /dev/null
           
-          if [ -z "$SOURCE_ROOT" ] || [ "$SOURCE_ROOT" = "." ]; then
-             echo "❌ Could not find the Kernel Makefile. Listing files:"
-             ls -R
-             exit 1
-          fi
-
-          cd "$SOURCE_ROOT"
-          echo "🎯 Working directory correctly switched to: $(pwd)"
-
-          # 2. Toolchain Discovery (Better search)
-          ROOT_DIR=$GITHUB_WORKSPACE
-          LD_PATH=$(find $ROOT_DIR -name "aarch64-linux-android-ld" | head -n 1)
-          CLANG_PATH=$(find $ROOT_DIR -name "clang" -type f | grep "bin/clang" | head -n 1)
-          CROSS_DIR=$(dirname "$LD_PATH")
+          # 2. TOOLCHAIN MAPPING (Direct Pathing)
+          # Since your folders are right there, we use the specific names from your 'ls'
+          ROOT_DIR=$(pwd)
+          GCC64="$ROOT_DIR/aarch64-linux-android-4.9/bin"
+          CLANG="$ROOT_DIR/clang/bin"
           
           export ARCH=arm64
-          export CROSS_COMPILE="${CROSS_DIR}/aarch64-linux-android-"
-          export PATH="$(dirname "$CLANG_PATH"):$CROSS_DIR:$PATH"
+          export CROSS_COMPILE="$GCC64/aarch64-linux-android-"
+          export PATH="$CLANG:$GCC64:$PATH"
 
-          # 3. WALT Fix (Only runs if the folder exists)
-          if [ -d "kernel/sched/walt" ]; then
-            ln -sf kernel/sched/walt/trace.h trace.h
-            find kernel/sched/walt -name "walt_trace.h" -exec sed -i 's|#define TRACE_INCLUDE_PATH .|#define TRACE_INCLUDE_PATH ../../kernel/sched/walt|g' {} +
-          else
-            echo "⚠️ WALT folder not found, skipping specific fix..."
-          fi
+          # 3. CONFIG SETUP
+          # You mentioned the defconfig is in the root, so we move it to the right home
+          echo "⚙️ Setting up Config..."
+          mkdir -p arch/arm64/configs/vendor/
+          cp gta9pwifi_eur_open_defconfig arch/arm64/configs/vendor/ 2>/dev/null || true
+          
+          # Now load it
+          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" vendor/gta9pwifi_eur_open_defconfig
+          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" olddefconfig
 
-          # 4. Load Config
-          cp arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig .config
-          make ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" HOSTCC=gcc HOSTCXX=g++ olddefconfig
-         
-          # 5. THE DIAGNOSTIC BUILD
-          echo "🔥 Starting the compilation..."
-          echo "Writing logs to build.log to prevent pipe crashes..."
-        
-          make -j2 \
-             ARCH=arm64 \
-             CROSS_COMPILE="$CROSS_COMPILE" \
-             CC=clang \
-             CLANG_TRIPLE=aarch64-linux-gnu- \
-             LD="$LD_PATH" \
-             HOSTCC=gcc \
-             HOSTCXX=g++ \
-             LLVM=1 \
-             LLVM_IAS=0 \
-             KCFLAGS="-Wno-error -fno-integrated-as -ferror-limit=0 -g0 -w -I$(pwd)" \
-             > build.log 2>&1 || touch build_failed.txt
+          # 4. START THE BUILD
+          echo "🔥 Starting Build..."
+          make -j$(nproc) \
+            ARCH=arm64 \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CC=clang \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            HOSTCC=gcc \
+            HOSTCXX=g++ \
+            > build.log 2>&1 || (tail -n 100 build.log && exit 1)
           
            # 6. THE AUTO-DETECTION
            if [ -f "build_failed.txt" ] || [ ! -f "arch/arm64/boot/Image.gz-dtb" ]; then
