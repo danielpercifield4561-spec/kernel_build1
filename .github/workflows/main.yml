@@ -32,7 +32,7 @@ jobs:
           df -h
 
    
-      - name: 🛠️ Set Up Build Environment
+      - name: 🛠️ Set Up Tool Environment
         run: |
           sudo apt-get update
           sudo apt-get install -y bc build-essential zip curl libstdc++6 git wget 7zip python3 libssl-dev libelf-dev llvm lld
@@ -54,17 +54,40 @@ jobs:
              sudo apt-get install -y lld
           fi
 
-      - name: 🛠️ Set Up Build Environment
+      - name: 🕵️ Debug and Set Up Build Environment
         run: |
+          echo "📂 --- Current Directory Listing ---"
+          ls -R
+          
+          echo "🔍 --- Searching for defconfig location ---"
+          # This finds the actual path of your file so we don't have to guess
+          CONFIG_PATH=$(find . -name "gta9p_defconfig" | head -n 1)
+          echo "Found defconfig at: $CONFIG_PATH"
+
           # 1. Enter the source directory
           cd kernel-source
 
-          # 2. Inject the defconfig into the VENDOR folder
-          # We use -p to ensure the path is respected
-          cp ../gta9p_defconfig ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
+          # 2. Inject the defconfig using the path we found
+          # If the file was in the root, $CONFIG_PATH handles it automatically
+          cp "../$CONFIG_PATH" ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig || cp "$CONFIG_PATH" ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
           
-          # 3. Verify the file landed correctly (Hacker sanity check)
-          ls ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
+          # 3. Final Sanity Check
+          if [ -f "./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig" ]; then
+            echo "✅ Defconfig successfully placed in vendor folder."
+          else
+            echo "❌ FAILED to place defconfig. Check the directory map above."
+            exit 1
+          fi
+
+          # 4. Starting Build
+          echo "🔥 Starting Build..."
+          make -j$(nproc) O=out \
+            ARCH=arm64 \
+            CC=clang \
+            LD=ld.lld \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" \
+            > ../build.log 2>&1 || (echo "❌ BUILD CRASHED"; tail -n 100 ../build.log && exit 1)
           
           # Build
           echo "🔥 Starting Build..."
@@ -75,6 +98,7 @@ jobs:
             CROSS_COMPILE="$CROSS_COMPILE" \
             CLANG_TRIPLE="$CLANG_TRIPLE" \
             > ../build.log 2>&1 || (echo "❌ BUILD CRASHED"; tail -n 100 ../build.log && exit 1)
+   
       - name: 📦 Reconstruct and Merge Source
         run: |
           echo "🔗 Combining Kernel pieces..."
@@ -102,8 +126,6 @@ jobs:
           cd ..
           rm Combined_Kernel.zip Combined_Platform.zip
           echo "✅ Source tree fully unpacked."
-
-
 
       - name: ⚙️ Compile Kernel
         run: |
