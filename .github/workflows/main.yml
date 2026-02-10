@@ -61,10 +61,10 @@ jobs:
 
           # 2. Inject the defconfig into the VENDOR folder
           # We use -p to ensure the path is respected
-          cp ../gta9p_defconfig ./arch/arm64/configs/vendor/gta9p_defconfig
+          cp ../gta9p_defconfig ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
           
           # 3. Verify the file landed correctly (Hacker sanity check)
-          ls ./arch/arm64/configs/vendor/gta9p_defconfig
+          ls ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
           
           # Build
           echo "🔥 Starting Build..."
