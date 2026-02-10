@@ -29,20 +29,57 @@ jobs:
           sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
           df -h
 
+   
       - name: 🛠️ Set Up Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential zip curl libstdc++6 git wget 7zip python3 libssl-dev libelf-dev
-                    
-          # Keeping the Lineage GCC (This one usually stays public)
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
+          sudo apt-get install -y bc build-essential zip curl libstdc++6 git wget 7zip python3 libssl-dev libelf-dev llvm lld
           
-          # Update the PATH to match the new folder name
-          echo "$GITHUB_WORKSPACE/clang-google/clang-r383902/bin" >> $GITHUB_PATH
+          # Clone Toolchains
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
+          # Using a slightly more modern Clang often helps with ld.lld issues
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b clang
+          
+          # PERSIST PATHS (This is the most important part)
+          echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin" >> $GITHUB_PATH
-          echo "ARCH=arm64" >> $GITHUB_ENV
-          echo "SUBARCH=arm64" >> $GITHUB_ENV
+          
+          # Check if ld.lld actually exists
+          if [ -f "$GITHUB_WORKSPACE/clang/bin/ld.lld" ]; then
+             echo "✅ ld.lld found in clang/bin"
+          else
+             echo "⚠️ ld.lld NOT found in clang/bin. Installing system lld as backup..."
+             sudo apt-get install -y lld
+          fi
 
+      - name: ⚙️ Compile Kernel
+        run: |
+          cd kernel-source
+          
+          # Explicitly set variables for the whole run
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-android-
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          
+          # Hardened Config Discovery
+          FIND_CONFIG=$(find . -name "gta9pwifi_eur_open_defconfig" -type f | head -n 1)
+          cp "$FIND_CONFIG" arch/arm64/configs/gta9p_defconfig
+          
+          # Create out directory
+          mkdir -p out
+          
+          # Defconfig - Note the LD=ld.lld addition
+          make O=out ARCH=arm64 CC=clang LD=ld.lld gta9p_defconfig
+          
+          # Build
+          echo "🔥 Starting Build..."
+          make -j$(nproc) O=out \
+            ARCH=arm64 \
+            CC=clang \
+            LD=ld.lld \
+            CROSS_COMPILE="$CROSS_COMPILE" \
+            CLANG_TRIPLE="$CLANG_TRIPLE" \
+            > ../build.log 2>&1 || (echo "❌ BUILD CRASHED"; tail -n 100 ../build.log && exit 1)
       - name: 📦 Reconstruct and Merge Source
         run: |
           echo "🔗 Combining Kernel pieces..."
