@@ -7,15 +7,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
       - name: ⚡ Cache Clang Toolchain
         uses: actions/cache@v4
-        id: cache-clang  # <--- This ID is the "Sensor"
+        id: cache-clang
         with:
           path: clang-google
           key: clang-r383902-${{ runner.os }}
 
       - name: 📥 Get Toolchains
-        if: steps.cache-clang.outputs.cache-hit != 'true' # <--- This uses the sensor
+        # This "if" is the ONLY place you need the git clone
+        if: steps.cache-clang.outputs.cache-hit != 'true'
         run: |
           git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth 1 --single-branch -b master clang-google
 
@@ -29,10 +33,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bc build-essential zip curl libstdc++6 git wget 7zip python3 libssl-dev libelf-dev
-          
-          # Use the official Google stable Clang (Common for Android 11/12 kernels)
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 clang-google
-          
+                    
           # Keeping the Lineage GCC (This one usually stays public)
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
           
