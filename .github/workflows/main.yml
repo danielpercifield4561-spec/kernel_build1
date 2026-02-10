@@ -63,25 +63,21 @@ jobs:
           fi
           echo "✅ Source tree is ready."
 
-      - name: ⚙️ Configure and Compile Kernel
+      - name: ⚙️ Configure and Compile
         run: |
-          cd kernel-source
+          # 1. Enter the source directory
+          cd $GITHUB_WORKSPACE/kernel-source
           
-          # 1. Setup paths
-          CROSS_COMPILE_PATH="$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
+          # 2. Inject the defconfig using an absolute path reference
+          # This replaces the line that was giving you the 'cannot stat' error
+          cp $GITHUB_WORKSPACE/gta9p_defconfig ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
           
-          # 2. Inject defconfig
-          # We look for your custom config in the root and move it to the vendor folder
-          cp ../gta9p_defconfig arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
-          
-          # 3. Generate .config
+          # 3. Proceed with the build
           make O=out ARCH=arm64 vendor/gta9pwifi_eur_open_defconfig
           
-          # 4. Compile
-          echo "🔥 Starting Build..."
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
-            CROSS_COMPILE="$CROSS_COMPILE_PATH" \
+            CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             KCFLAGS="-Wno-error" \
