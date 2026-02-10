@@ -35,23 +35,32 @@ jobs:
 
       - name: 📦 Reconstruct and Merge Source
         run: |
-          echo "🔗 Combining Kernel pieces from root..."
-          # Since the log shows files are in the main folder, we 'cat' them here
-          cat Kernel.zip.0* > Combined_Kernel.zip
+          echo "🔗 Combining Kernel pieces..."
+          # The '*' finds all files like .001, .002 inside the folder
+          cat Kernel.zip/Kernel.zip.0* > Combined_Kernel.zip
           
-          echo "🔗 Combining Platform pieces from root..."
-          cat Platform.zip.0* > Combined_Platform.zip
+          echo "🔗 Combining Platform pieces..."
+          cat Platform.zip/Platform.zip.0* > Combined_Platform.zip
           
           mkdir -p kernel-source
-          echo "📦 Extracting Kernel..."
-          7z x Combined_Kernel.zip -okernel-source/
           
-          echo "📦 Merging Platform into source..."
+          # Step 1: Extract the outer Zips
+          7z x Combined_Kernel.zip -okernel-source/
           7z x Combined_Platform.zip -aoa -okernel-source/
           
-          # Clean up the big temporary zips
+          # Step 2: Extract the "Double Wrapped" tar.gz you found earlier
+          cd kernel-source
+          if [ -f "Kernel.tar.gz" ]; then
+            echo "📦 Detected tar.gz inside zip, extracting source..."
+            tar -xzvf Kernel.tar.gz --strip-components=1
+            rm Kernel.tar.gz
+          fi
+          
+          # Cleanup
+          cd ..
           rm Combined_Kernel.zip Combined_Platform.zip
-          echo "✅ Source tree merged."
+          echo "✅ Source tree fully unpacked."
+
 
 
       - name: ⚙️ Compile Kernel
