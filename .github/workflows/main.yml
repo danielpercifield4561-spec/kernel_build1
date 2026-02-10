@@ -49,7 +49,7 @@ jobs:
 
       - name: ⚙️ Configure and Compile Kernel
         run: |
-          # Define absolute paths
+          # Define absolute paths for toolchains
           TOOLCHAIN_DIR=$GITHUB_WORKSPACE/toolchains
           CLANG_BIN=$TOOLCHAIN_DIR/clang/bin
           GCC64_BIN=$TOOLCHAIN_DIR/gcc64/bin/aarch64-linux-android-
@@ -57,22 +57,28 @@ jobs:
           
           cd $GITHUB_WORKSPACE/kernel-source
 
-          # 1. Locate your defconfig and move it into the kernel source tree
-          # We look for the file in your repo and copy it to arch/arm64/configs/vendor/
-          CONF_FILE=$(find $GITHUB_WORKSPACE -name "gta9pwifi_eur_open_defconfig" | head -n 1)
+          # 1. Handle Defconfig Placement
+          TARGET_CONFIG="arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig"
           
-          if [ -z "$CONF_FILE" ]; then
-            echo "❌ ERROR: gta9pwifi_eur_open_defconfig not found in your repository!"
-            ls -R $GITHUB_WORKSPACE
-            exit 1
+          if [ -f "$TARGET_CONFIG" ]; then
+            echo "✅ Defconfig already exists in the kernel tree. Skipping copy."
+          else
+            echo "🔍 Searching for defconfig in repository..."
+            # Look for the file in the root of the repo (outside kernel-source)
+            REPO_CONFIG=$(find $GITHUB_WORKSPACE -maxdepth 3 -name "gta9pwifi_eur_open_defconfig" | grep -v "kernel-source" | head -n 1)
+            
+            if [ -n "$REPO_CONFIG" ]; then
+              mkdir -p arch/arm64/configs/vendor/
+              cp "$REPO_CONFIG" "$TARGET_CONFIG"
+              echo "✅ Copied defconfig from repository to $TARGET_CONFIG"
+            else
+              echo "❌ ERROR: Could not find gta9pwifi_eur_open_defconfig anywhere!"
+              exit 1
+            fi
           fi
-          
-          mkdir -p arch/arm64/configs/vendor/
-          cp "$CONF_FILE" arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
-          echo "✅ Defconfig placed at arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig"
 
           # 2. Set Build Arguments
-          # Adding SUBARCH and forcing ARCH=arm64 stops the 'MIPS' / 'x86' fallback errors
+          # We force ARCH and SUBARCH here to prevent the "MIPS" fallback error.
           MAKE_ARGS="
             ARCH=arm64 \
             SUBARCH=arm64 \
@@ -97,6 +103,7 @@ jobs:
 
           # 4. Build the kernel
           echo "🚀 Starting Compilation..."
+          # We use 'tee' to show logs in the console AND save to a file
           make -j$(nproc --all) $MAKE_ARGS 2>&1 | tee ../build.log || (tail -n 100 ../build.log && exit 1)
 
       - name: 📤 Upload Kernel Result
