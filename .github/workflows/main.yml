@@ -9,8 +9,6 @@ jobs:
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
-        # We don't use 'path: kernel-source' here because your .zip files 
-        # are in the root of your repo. We want to extract INTO a folder later.
 
       - name: 🧹 Maximize Build Space
         run: |
@@ -18,31 +16,16 @@ jobs:
           sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
           df -h
 
-      - name: ⚡ Cache Clang Toolchain
-        uses: actions/cache@v4
-        id: cache-clang
-        with:
-          path: clang-google
-          key: clang-r383902-${{ runner.os }}
-
-      - name: 📥 Get Toolchains
-        if: steps.cache-clang.outputs.cache-hit != 'true'
-        run: |
-          git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth 1 --single-branch -b master clang-google
-
       - name: 🛠️ Install Build Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y bc build-essential zip curl libstdc++6 git wget 7zip python3 libssl-dev libelf-dev llvm lld
           
+          mkdir toolchains
           # Clone Toolchains
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b clang
-          
-          # Add to PATH
-          echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
-          echo "$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin" >> $GITHUB_PATH
-          exit 0 # 
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 toolchains/gcc64
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9 toolchains/gcc32
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b toolchains/clang
 
       - name: 📦 Reconstruct and Unpack Source
         run: |
@@ -58,37 +41,63 @@ jobs:
           
           cd kernel-source
           if [ -f "Kernel.tar.gz" ]; then
-            echo "📦 Extracting inner tarball..."
-            tar -xzvf Kernel.tar.gz --strip-components=1
+            echo "📦 Extracting inner Samsung tarball..."
+            tar -xf Kernel.tar.gz --strip-components=1
             rm Kernel.tar.gz
           fi
           echo "✅ Source tree is ready."
 
       - name: ⚙️ Configure and Compile Kernel
         run: |
+          # Define absolute paths
+          TOOLCHAIN_DIR=$GITHUB_WORKSPACE/toolchains
+          CLANG_BIN=$TOOLCHAIN_DIR/clang/bin
+          GCC64_BIN=$TOOLCHAIN_DIR/gcc64/bin/aarch64-linux-android-
+          GCC32_BIN=$TOOLCHAIN_DIR/gcc32/bin/arm-linux-androideabi-
+          
           cd $GITHUB_WORKSPACE/kernel-source
+
+          # 1. Locate your defconfig and move it into the kernel source tree
+          # We look for the file in your repo and copy it to arch/arm64/configs/vendor/
+          CONF_FILE=$(find $GITHUB_WORKSPACE -name "gta9pwifi_eur_open_defconfig" | head -n 1)
           
-          # 1. Align the names: Grab your file and rename it for the Samsung build system
-          # This fixes the 'cannot stat' error from your screenshot
-          cp $GITHUB_WORKSPACE/gta9p_defconfig ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
+          if [ -z "$CONF_FILE" ]; then
+            echo "❌ ERROR: gta9pwifi_eur_open_defconfig not found in your repository!"
+            ls -R $GITHUB_WORKSPACE
+            exit 1
+          fi
           
-          # 2. Force the build to stay on ARM64 (This stops the MIPS errors)
-          make O=out ARCH=arm64 vendor/gta9pwifi_eur_open_defconfig
-          
-          # 3. Compile with strict architecture locks
-          make -j$(nproc --all) O=out \
+          mkdir -p arch/arm64/configs/vendor/
+          cp "$CONF_FILE" arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
+          echo "✅ Defconfig placed at arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig"
+
+          # 2. Set Build Arguments
+          # Adding SUBARCH and forcing ARCH=arm64 stops the 'MIPS' / 'x86' fallback errors
+          MAKE_ARGS="
             ARCH=arm64 \
-            CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
-            CC=clang \
+            SUBARCH=arm64 \
+            O=out \
+            CC=$CLANG_BIN/clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
+            CROSS_COMPILE=$GCC64_BIN \
+            CROSS_COMPILE_ARM32=$GCC32_BIN \
+            LD=$CLANG_BIN/ld.lld \
+            AR=$CLANG_BIN/llvm-ar \
+            NM=$CLANG_BIN/llvm-nm \
+            OBJCOPY=$CLANG_BIN/llvm-objcopy \
+            OBJDUMP=$CLANG_BIN/llvm-objdump \
+            STRIP=$CLANG_BIN/llvm-strip \
             DTC_EXT=dtc \
-            KCFLAGS="-Wno-error" \
-            LD=ld.lld \
-            AR=llvm-ar \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump \
-            STRIP=llvm-strip > ../build.log 2>&1 || (tail -n 100 ../build.log && exit 1)
+            KCFLAGS=-Wno-error
+          "
+
+          # 3. Configure the kernel
+          echo "⚙️ Running Defconfig..."
+          make $MAKE_ARGS vendor/gta9pwifi_eur_open_defconfig
+
+          # 4. Build the kernel
+          echo "🚀 Starting Compilation..."
+          make -j$(nproc --all) $MAKE_ARGS 2>&1 | tee ../build.log || (tail -n 100 ../build.log && exit 1)
 
       - name: 📤 Upload Kernel Result
         if: always()
