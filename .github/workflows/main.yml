@@ -47,8 +47,10 @@ jobs:
           fi
           echo "✅ Source tree is ready."
 
-      - name: ⚙️ Configure and Compile Kernel
-        run: |
+       - name: ⚙️ Configure and Compile Kernel
+         run: |
+          # 1. Setup paths
+          set -o pipefail
           TOOLCHAIN_DIR=$GITHUB_WORKSPACE/toolchains
           CLANG_BIN=$TOOLCHAIN_DIR/clang/bin
           GCC64_BIN=$TOOLCHAIN_DIR/gcc64/bin/aarch64-linux-android-
@@ -56,10 +58,7 @@ jobs:
           
           cd $GITHUB_WORKSPACE/kernel-source
 
-          # Ensure the out directory exists
-          mkdir -p out
-
-          # 1. Defconfig Logic
+          # 2. Defconfig Logic
           TARGET_CONFIG="arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig"
           if [ ! -f "$TARGET_CONFIG" ]; then
             REPO_CONFIG=$(find $GITHUB_WORKSPACE -maxdepth 3 -name "gta9pwifi_eur_open_defconfig" | grep -v "kernel-source" | head -n 1)
@@ -69,7 +68,7 @@ jobs:
             fi
           fi
 
-          # 2. Build Arguments (Standardized)
+          # 3. Build Arguments
           MAKE_ARGS="
             ARCH=arm64 \
             SUBARCH=arm64 \
@@ -88,30 +87,39 @@ jobs:
             KCFLAGS=-Wno-error
           "
 
-          # 3. Configure
+          # 4. Configure
           echo "⚙️ Running Defconfig..."
           make $MAKE_ARGS vendor/gta9pwifi_eur_open_defconfig
 
-          # 4. Compile EVERYTHING
-          # We explicitly ask for Image.gz and dtbs
+          # 5. Compile
           echo "🚀 Starting Compilation..."
-          make -j$(nproc --all) $MAKE_ARGS Image.gz dtbs 2>&1 | tee ../build.log
+          # We add Image.gz-dtb because some Samsung kernels combine the DTB into the image
+          make -j$(nproc --all) $MAKE_ARGS Image.gz Image.gz-dtb dtbs 2>&1 | tee ../build.log
+
+          # 6. SEARCH AND RESCUE: Find the actual files
+          echo "🔍 Searching for compiled artifacts..."
+          mkdir -p $GITHUB_WORKSPACE/final_output
           
-          # Check if Image.gz exists after build
-          if [ -f "out/arch/arm64/boot/Image.gz" ]; then
-            echo "✅ Kernel compiled successfully!"
-          else
-            echo "❌ Kernel NOT found! Checking for any Image file..."
-            find out/arch/arm64/boot/ -name "Image*"
+          # Find any Image files and move them to final_output
+          find out/arch/arm64/boot -name "Image*" -exec cp {} $GITHUB_WORKSPACE/final_output/ \;
+          
+          # Find any DTB files and move them
+          find out/arch/arm64/boot/dts -name "*.dtb" -exec cp {} $GITHUB_WORKSPACE/final_output/ \;
+
+          # Check if we found anything
+          if [ -z "$(ls -A $GITHUB_WORKSPACE/final_output)" ]; then
+            echo "❌ ERROR: No kernel files found in the output directory!"
             exit 1
+          else
+            echo "✅ Success! Found the following files:"
+            ls -lh $GITHUB_WORKSPACE/final_output
           fi
 
-      - name: 📤 Upload Kernel Result
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
+       - name: 📤 Upload Kernel Result
+         if: always()
+         uses: actions/upload-artifact@v4
+         with:
           name: Tab-A9-Plus-Kernel
           path: |
-            kernel-source/out/arch/arm64/boot/Image*
-            kernel-source/out/arch/arm64/boot/dts/qcom/*.dtb
+            final_output/*
             build.log
