@@ -42,6 +42,7 @@ jobs:
           # Add to PATH
           echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin" >> $GITHUB_PATH
+          exit 0 # 
 
       - name: 📦 Reconstruct and Unpack Source
         run: |
@@ -63,26 +64,25 @@ jobs:
           fi
           echo "✅ Source tree is ready."
 
-      - name: ⚙️ Configure and Compile
+      - name: ⚙️ Configure and Compile Kernel
         run: |
-          # 1. Enter the source directory
           cd $GITHUB_WORKSPACE/kernel-source
           
-          # 2. Inject the defconfig using an absolute path reference
-          # This replaces the line that was giving you the 'cannot stat' error
+          # 1. Align the names: Grab your file and rename it for the Samsung build system
+          # This fixes the 'cannot stat' error from your screenshot
           cp $GITHUB_WORKSPACE/gta9p_defconfig ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
           
-          # 3. Proceed with the build
+          # 2. Force the build to stay on ARM64 (This stops the MIPS errors)
           make O=out ARCH=arm64 vendor/gta9pwifi_eur_open_defconfig
           
+          # 3. Compile with strict architecture locks
           make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CROSS_COMPILE=$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android- \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
+            DTC_EXT=dtc \
             KCFLAGS="-Wno-error" \
-            HOSTCC=gcc \
-            HOSTCXX=g++ \
             LD=ld.lld \
             AR=llvm-ar \
             NM=llvm-nm \
