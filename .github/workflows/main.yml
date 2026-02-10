@@ -75,20 +75,29 @@ jobs:
           yes "" | make O=out ARCH=arm64 tmp_defconfig
           
           echo "🔥 Starting Build..."
-          make -j$(nproc --all) O=out \
+                    make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CROSS_COMPILE="$CROSS_COMPILE_PATH" \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
+            KCFLAGS="-Wno-error" \
             HOSTCC=gcc \
-            HOSTCXX=g++ > ../build.log 2>&1 || (tail -n 100 ../build.log && exit 1)
+            HOSTCXX=g++ \
+            LD=ld.lld \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip > ../build.log 2>&1 || (tail -n 100 ../build.log && exit 1)
 
 
-      - name: 📤 Upload Result
-        if: always()
+      - name: 📤 Upload Kernel Result
+        if: always() # This runs even if the build fails so you can get the log!
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-build-output
+          name: Tab-A9-Plus-Kernel
           path: |
-            kernel-source/out/arch/arm64/boot/Image*
+            kernel-source/out/arch/arm64/boot/Image.gz
+            kernel-source/out/arch/arm64/boot/dts/qcom/*.dtb
             build.log
+
