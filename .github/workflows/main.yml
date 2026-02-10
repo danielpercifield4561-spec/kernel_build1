@@ -9,9 +9,15 @@ jobs:
     steps:
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
-        with:
-          path: kernel-source
-          
+        # We don't use 'path: kernel-source' here because your .zip files 
+        # are in the root of your repo. We want to extract INTO a folder later.
+
+      - name: 🧹 Maximize Build Space
+        run: |
+          sudo docker image prune -a -f
+          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
+          df -h
+
       - name: ⚡ Cache Clang Toolchain
         uses: actions/cache@v4
         id: cache-clang
@@ -20,126 +26,60 @@ jobs:
           key: clang-r383902-${{ runner.os }}
 
       - name: 📥 Get Toolchains
-        # This "if" is the ONLY place you need the git clone
         if: steps.cache-clang.outputs.cache-hit != 'true'
         run: |
           git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth 1 --single-branch -b master clang-google
 
-      - name: 🧹 Maximize Build Space
-        run: |
-          sudo docker image prune -a -f
-          sudo rm -rf /usr/share/dotnet /opt/ghc "/usr/local/share/boost"
-          df -h
-
-   
-      - name: 🛠️ Set Up Tool Environment
+      - name: 🛠️ Install Build Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y bc build-essential zip curl libstdc++6 git wget 7zip python3 libssl-dev libelf-dev llvm lld
           
           # Clone Toolchains
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 aarch64-linux-android-4.9
-          # Using a slightly more modern Clang often helps with ld.lld issues
           git clone --depth=1 https://github.com/LineageOS/android_prebuilts_clang_kernel_linux-x86_clang-r416183b clang
           
-          # PERSIST PATHS (This is the most important part)
+          # Add to PATH
           echo "$GITHUB_WORKSPACE/clang/bin" >> $GITHUB_PATH
           echo "$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin" >> $GITHUB_PATH
-          
-          # Check if ld.lld actually exists
-          if [ -f "$GITHUB_WORKSPACE/clang/bin/ld.lld" ]; then
-             echo "✅ ld.lld found in clang/bin"
-          else
-             echo "⚠️ ld.lld NOT found in clang/bin. Installing system lld as backup..."
-             sudo apt-get install -y lld
-          fi
 
-      - name: 🕵️ Debug and Set Up Build Environment
+      - name: 📦 Reconstruct and Unpack Source
         run: |
-          echo "📂 --- Current Directory Listing ---"
-          ls -R
-          
-          echo "🔍 --- Searching for defconfig location ---"
-          # This finds the actual path of your file so we don't have to guess
-          CONFIG_PATH=$(find . -name "gta9p_defconfig" | head -n 1)
-          echo "Found defconfig at: $CONFIG_PATH"
-
-          # 1. Enter the source directory
-          cd kernel-source
-
-          # 2. Inject the defconfig using the path we found
-          # If the file was in the root, $CONFIG_PATH handles it automatically
-          cp "../$CONFIG_PATH" ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig || cp "$CONFIG_PATH" ./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
-          
-          # 3. Final Sanity Check
-          if [ -f "./arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig" ]; then
-            echo "✅ Defconfig successfully placed in vendor folder."
-          else
-            echo "❌ FAILED to place defconfig. Check the directory map above."
-            exit 1
-          fi
-
-          # 4. Starting Build
-          echo "🔥 Starting Build..."
-          make -j$(nproc) O=out \
-            ARCH=arm64 \
-            CC=clang \
-            LD=ld.lld \
-            CROSS_COMPILE="$CROSS_COMPILE" \
-            CLANG_TRIPLE="$CLANG_TRIPLE" \
-            > ../build.log 2>&1 || (echo "❌ BUILD CRASHED"; tail -n 100 ../build.log && exit 1)
-          
-          # Build
-          echo "🔥 Starting Build..."
-          make -j$(nproc) O=out \
-            ARCH=arm64 \
-            CC=clang \
-            LD=ld.lld \
-            CROSS_COMPILE="$CROSS_COMPILE" \
-            CLANG_TRIPLE="$CLANG_TRIPLE" \
-            > ../build.log 2>&1 || (echo "❌ BUILD CRASHED"; tail -n 100 ../build.log && exit 1)
-   
-      - name: 📦 Reconstruct and Merge Source
-        run: |
-          echo "🔗 Combining Kernel pieces..."
-          # The '*' finds all files like .001, .002 inside the folder
+          echo "🔗 Combining split zip files..."
           cat Kernel.zip/Kernel.zip.0* > Combined_Kernel.zip
-          
-          echo "🔗 Combining Platform pieces..."
           cat Platform.zip/Platform.zip.0* > Combined_Platform.zip
           
           mkdir -p kernel-source
           
-          # Step 1: Extract the outer Zips
+          echo "📂 Extracting Zips..."
           7z x Combined_Kernel.zip -okernel-source/
           7z x Combined_Platform.zip -aoa -okernel-source/
           
-          # Step 2: Extract the "Double Wrapped" tar.gz you found earlier
           cd kernel-source
           if [ -f "Kernel.tar.gz" ]; then
-            echo "📦 Detected tar.gz inside zip, extracting source..."
+            echo "📦 Extracting inner tarball..."
             tar -xzvf Kernel.tar.gz --strip-components=1
             rm Kernel.tar.gz
           fi
-          
-          # Cleanup
-          cd ..
-          rm Combined_Kernel.zip Combined_Platform.zip
-          echo "✅ Source tree fully unpacked."
+          echo "✅ Source tree is ready."
 
-      - name: ⚙️ Compile Kernel
+      - name: ⚙️ Configure and Compile Kernel
         run: |
           cd kernel-source
+          
+          # 1. Setup paths
           CROSS_COMPILE_PATH="$GITHUB_WORKSPACE/aarch64-linux-android-4.9/bin/aarch64-linux-android-"
           
-          DEFCONFIG_PATH=$(find . -name "gta9pwifi_eur_open_defconfig" -type f | head -n 1)
-          cp "$DEFCONFIG_PATH" arch/arm64/configs/tmp_defconfig
+          # 2. Inject defconfig
+          # We look for your custom config in the root and move it to the vendor folder
+          cp ../gta9p_defconfig arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig
           
-          # Use 'yes' to handle any legacy config prompts automatically
-          yes "" | make O=out ARCH=arm64 tmp_defconfig
+          # 3. Generate .config
+          make O=out ARCH=arm64 vendor/gta9pwifi_eur_open_defconfig
           
+          # 4. Compile
           echo "🔥 Starting Build..."
-                    make -j$(nproc --all) O=out \
+          make -j$(nproc --all) O=out \
             ARCH=arm64 \
             CROSS_COMPILE="$CROSS_COMPILE_PATH" \
             CC=clang \
@@ -154,9 +94,8 @@ jobs:
             OBJDUMP=llvm-objdump \
             STRIP=llvm-strip > ../build.log 2>&1 || (tail -n 100 ../build.log && exit 1)
 
-
       - name: 📤 Upload Kernel Result
-        if: always() # This runs even if the build fails so you can get the log!
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Tab-A9-Plus-Kernel
@@ -164,4 +103,3 @@ jobs:
             kernel-source/out/arch/arm64/boot/Image.gz
             kernel-source/out/arch/arm64/boot/dts/qcom/*.dtb
             build.log
-
