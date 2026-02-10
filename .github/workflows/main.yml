@@ -54,24 +54,17 @@ jobs:
              sudo apt-get install -y lld
           fi
 
-      - name: ⚙️ Compile Kernel
+      - name: 🛠️ Set Up Build Environment
         run: |
+          # 1. Enter the source directory
           cd kernel-source
+
+          # 2. Inject the defconfig into the VENDOR folder
+          # We use -p to ensure the path is respected
+          cp ../gta9p_defconfig ./arch/arm64/configs/vendor/gta9p_defconfig
           
-          # Explicitly set variables for the whole run
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-android-
-          export CLANG_TRIPLE=aarch64-linux-gnu-
-          
-          # Hardened Config Discovery
-          FIND_CONFIG=$(find . -name "gta9pwifi_eur_open_defconfig" -type f | head -n 1)
-          cp "$FIND_CONFIG" arch/arm64/configs/gta9p_defconfig
-          
-          # Create out directory
-          mkdir -p out
-          
-          # Defconfig - Note the LD=ld.lld addition
-          make O=out ARCH=arm64 CC=clang LD=ld.lld gta9p_defconfig
+          # 3. Verify the file landed correctly (Hacker sanity check)
+          ls ./arch/arm64/configs/vendor/gta9p_defconfig
           
           # Build
           echo "🔥 Starting Build..."
