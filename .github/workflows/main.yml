@@ -49,7 +49,6 @@ jobs:
 
       - name: ⚙️ Configure and Compile Kernel
         run: |
-          # Define absolute paths for toolchains
           TOOLCHAIN_DIR=$GITHUB_WORKSPACE/toolchains
           CLANG_BIN=$TOOLCHAIN_DIR/clang/bin
           GCC64_BIN=$TOOLCHAIN_DIR/gcc64/bin/aarch64-linux-android-
@@ -57,28 +56,20 @@ jobs:
           
           cd $GITHUB_WORKSPACE/kernel-source
 
-          # 1. Handle Defconfig Placement
+          # Ensure the out directory exists
+          mkdir -p out
+
+          # 1. Defconfig Logic
           TARGET_CONFIG="arch/arm64/configs/vendor/gta9pwifi_eur_open_defconfig"
-          
-          if [ -f "$TARGET_CONFIG" ]; then
-            echo "✅ Defconfig already exists in the kernel tree. Skipping copy."
-          else
-            echo "🔍 Searching for defconfig in repository..."
-            # Look for the file in the root of the repo (outside kernel-source)
+          if [ ! -f "$TARGET_CONFIG" ]; then
             REPO_CONFIG=$(find $GITHUB_WORKSPACE -maxdepth 3 -name "gta9pwifi_eur_open_defconfig" | grep -v "kernel-source" | head -n 1)
-            
             if [ -n "$REPO_CONFIG" ]; then
               mkdir -p arch/arm64/configs/vendor/
               cp "$REPO_CONFIG" "$TARGET_CONFIG"
-              echo "✅ Copied defconfig from repository to $TARGET_CONFIG"
-            else
-              echo "❌ ERROR: Could not find gta9pwifi_eur_open_defconfig anywhere!"
-              exit 1
             fi
           fi
 
-          # 2. Set Build Arguments
-          # We force ARCH and SUBARCH here to prevent the "MIPS" fallback error.
+          # 2. Build Arguments (Standardized)
           MAKE_ARGS="
             ARCH=arm64 \
             SUBARCH=arm64 \
@@ -97,14 +88,23 @@ jobs:
             KCFLAGS=-Wno-error
           "
 
-          # 3. Configure the kernel
+          # 3. Configure
           echo "⚙️ Running Defconfig..."
           make $MAKE_ARGS vendor/gta9pwifi_eur_open_defconfig
 
-          # 4. Build the kernel
+          # 4. Compile EVERYTHING
+          # We explicitly ask for Image.gz and dtbs
           echo "🚀 Starting Compilation..."
-          # We use 'tee' to show logs in the console AND save to a file
-          make -j$(nproc --all) $MAKE_ARGS 2>&1 | tee ../build.log || (tail -n 100 ../build.log && exit 1)
+          make -j$(nproc --all) $MAKE_ARGS Image.gz dtbs 2>&1 | tee ../build.log
+          
+          # Check if Image.gz exists after build
+          if [ -f "out/arch/arm64/boot/Image.gz" ]; then
+            echo "✅ Kernel compiled successfully!"
+          else
+            echo "❌ Kernel NOT found! Checking for any Image file..."
+            find out/arch/arm64/boot/ -name "Image*"
+            exit 1
+          fi
 
       - name: 📤 Upload Kernel Result
         if: always()
@@ -112,6 +112,6 @@ jobs:
         with:
           name: Tab-A9-Plus-Kernel
           path: |
-            kernel-source/out/arch/arm64/boot/Image.gz
+            kernel-source/out/arch/arm64/boot/Image*
             kernel-source/out/arch/arm64/boot/dts/qcom/*.dtb
             build.log
