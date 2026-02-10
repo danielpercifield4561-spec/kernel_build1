@@ -7,8 +7,24 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
+
+      # --- 1. CHECK THE CACHE FIRST ---
+      - name: ⚡ Cache Clang Toolchain
+        uses: actions/cache@v4
+        id: cache-clang
+        with:
+          path: clang-google
+          key: clang-r383902-${{ runner.os }}
+
+      # --- 2. ONLY CLONE IF CACHE IS EMPTY ---
+      - name: 📥 Get Toolchains
+        if: steps.cache-clang.outputs.cache-hit != 'true'
+        run: |
+          echo "🔍 Cache miss! Navigating the maze..."
+          git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 --depth 1 --single-branch -b master clang-google
+        
 
       - name: 🧹 Maximize Build Space
         run: |
